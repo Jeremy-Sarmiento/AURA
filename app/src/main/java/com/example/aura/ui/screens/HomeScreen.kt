@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,10 +22,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +35,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,9 +45,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aura.model.Playlist
 import com.example.aura.model.Song
+import com.example.ui.theme.AuraAccentPink
+import com.example.ui.theme.AuraBadge
 import com.example.ui.theme.AuraDarkBackground
 import com.example.ui.theme.AuraDarkSurfaceVariant
 import com.example.ui.theme.AuraPrimaryPurple
+import com.example.ui.theme.AuraPrimaryPurpleLight
+import com.example.ui.theme.AuraScreenTitle
+import com.example.ui.theme.AuraSecondaryBlue
 import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
@@ -52,31 +62,28 @@ fun HomeScreen(
     playlists: List<Playlist>,
     onSongClick: (Song) -> Unit,
     onPlaylistClick: (Playlist) -> Unit,
-    onOpenFileExplorer: () -> Unit
+    onOpenFileExplorer: () -> Unit,
+    onRequestPermission: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(AuraDarkBackground)
             .padding(horizontal = 20.dp)
-            .testTag("home_screen")
+            .testTag("home_screen"),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
     ) {
         item {
-            Spacer(modifier = Modifier.height(16.dp))
-
             // Screen title "INICIO"
             Text(
                 text = "INICIO",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
-                    fontSize = 18.sp
-                ),
+                style = AuraScreenTitle,
                 color = Color.White,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
+                    .semantics { heading() }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -89,7 +96,7 @@ fun HomeScreen(
                 FeaturedCard(
                     title = "Gestor Local",
                     subtitle = "Escanear celular & carpetas",
-                    cardColor = Color(0xFF5C798E),
+                    cardColor = AuraSecondaryBlue,
                     icon = Icons.Default.FolderOpen,
                     modifier = Modifier.weight(1f),
                     onClick = onOpenFileExplorer
@@ -97,7 +104,7 @@ fun HomeScreen(
                 FeaturedCard(
                     title = "Mis Favoritas",
                     subtitle = "Tus temas marcados",
-                    cardColor = Color(0xFF7C869A),
+                    cardColor = AuraAccentPink,
                     modifier = Modifier.weight(1f),
                     onClick = {
                         val pl = playlists.find { it.id == "playlist_favorites" }
@@ -113,169 +120,222 @@ fun HomeScreen(
             }
 
             Spacer(modifier = Modifier.height(28.dp))
-
-            // Section: Listas de Reproducción
-            Text(
-                text = "Listas de Reproducción",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color.White
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
         }
 
-        item {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(playlists, key = { it.id }) { playlist ->
-                    Surface(
-                        modifier = Modifier
-                            .width(140.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { onPlaylistClick(playlist) },
-                        color = AuraDarkSurfaceVariant
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(120.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color(playlist.coverColorHex)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MusicNote,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(44.dp)
+        if (songs.isEmpty()) {
+            item {
+                EmptyLibraryState(
+                    onRequestPermission = onRequestPermission,
+                    onOpenFileExplorer = onOpenFileExplorer
+                )
+            }
+        } else {
+            item {
+                // Section: Listas de Reproducción
+                Text(
+                    text = "Listas de Reproducción",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White,
+                    modifier = Modifier.semantics { heading() }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(playlists, key = { it.id }) { playlist ->
+                        Surface(
+                            modifier = Modifier
+                                .width(140.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable(
+                                    role = Role.Button,
+                                    onClickLabel = "Abrir ${playlist.name}"
+                                ) { onPlaylistClick(playlist) },
+                            color = AuraDarkSurfaceVariant
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(120.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(playlist.coverColorHex)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MusicNote,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(44.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = playlist.name,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = playlist.description.ifEmpty { "Lista local" },
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = AuraTextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Section: Pistas Locales
+                Text(
+                    text = "Pistas Locales",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White,
+                    modifier = Modifier.semantics { heading() }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Song list items with keys for optimal recomposition performance
+            items(songs.take(10), key = { it.id }) { song ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = "Reproducir ${song.title}"
+                        ) { onSongClick(song) },
+                    color = AuraDarkSurfaceVariant.copy(alpha = 0.6f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(song.coverColorHex)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = playlist.name,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                text = song.title,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                 color = Color.White,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            Text(
-                                text = playlist.description.ifEmpty { "Lista local" },
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = AuraTextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Section: Pistas Locales
-            Text(
-                text = "Pistas Locales",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color.White
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        // Song list items with keys for optimal recomposition performance
-        items(songs.take(10), key = { it.id }) { song ->
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable { onSongClick(song) },
-                color = AuraDarkSurfaceVariant.copy(alpha = 0.6f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color(song.coverColorHex)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MusicNote,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = song.title,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = song.artist,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = AuraTextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (song.isLossless) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(AuraPrimaryPurple.copy(alpha = 0.2f))
-                                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                                ) {
-                                    Text(
-                                        text = song.format,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        color = AuraPrimaryPurple
-                                    )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = song.artist,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AuraTextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (song.isLossless) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(AuraPrimaryPurple.copy(alpha = 0.2f))
+                                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    ) {
+                                        Text(
+                                            text = song.format,
+                                            style = AuraBadge,
+                                            color = AuraPrimaryPurpleLight
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    Text(
-                        text = song.durationFormatted,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AuraTextMuted
-                    )
-
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    IconButton(
-                        onClick = { onSongClick(song) },
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Reproducir",
-                            tint = AuraPrimaryPurple
+                        Text(
+                            text = song.durationFormatted,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AuraTextMuted
                         )
                     }
                 }
             }
         }
+    }
+}
 
-        item {
-            Spacer(modifier = Modifier.height(100.dp))
+@Composable
+private fun EmptyLibraryState(
+    onRequestPermission: () -> Unit,
+    onOpenFileExplorer: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(AuraDarkSurfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = AuraPrimaryPurpleLight,
+                modifier = Modifier.size(36.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Tu biblioteca está vacía",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = Color.White,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "AURA necesita permiso para leer la música de tu teléfono, o puedes importar archivos y carpetas manualmente.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = AuraTextSecondary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Button(
+            onClick = onRequestPermission,
+            colors = ButtonDefaults.buttonColors(containerColor = AuraPrimaryPurple)
+        ) {
+            Text("Permitir acceso a música")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(onClick = onOpenFileExplorer) {
+            Icon(Icons.Default.FolderOpen, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Importar archivos")
         }
     }
 }
@@ -292,7 +352,7 @@ private fun FeaturedCard(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .clickable { onClick() }
+            .clickable(role = Role.Button, onClickLabel = title) { onClick() }
     ) {
         Box(
             modifier = Modifier
@@ -305,7 +365,7 @@ private fun FeaturedCard(
             Icon(
                 imageVector = icon ?: Icons.Default.GraphicEq,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.85f),
+                tint = Color.White.copy(alpha = 0.9f),
                 modifier = Modifier.size(38.dp)
             )
         }

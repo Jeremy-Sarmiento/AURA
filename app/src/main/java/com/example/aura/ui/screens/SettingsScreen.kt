@@ -3,7 +3,6 @@ package com.example.aura.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,12 +12,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -29,7 +30,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,70 +40,50 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.ui.theme.AuraCardBorder
 import com.example.ui.theme.AuraDarkBackground
 import com.example.ui.theme.AuraDarkSurfaceVariant
 import com.example.ui.theme.AuraPrimaryPurple
+import com.example.ui.theme.AuraPrimaryPurpleLight
+import com.example.ui.theme.AuraScreenTitle
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
 fun SettingsScreen(
-    hifiLosslessEnabled: Boolean,
     notificationsEnabled: Boolean,
-    onToggleHiFi: (Boolean) -> Unit,
     onToggleNotifications: (Boolean) -> Unit,
     onOpenFileExplorer: () -> Unit
 ) {
-    var accountEnabled by remember { mutableStateOf(true) }
-    var downloadsLocalEnabled by remember { mutableStateOf(true) }
     var showHelpDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(AuraDarkBackground)
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp)
             .testTag("settings_screen")
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Screen title "AJUSTES" matching Mockup 10
         Text(
             text = "AJUSTES",
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp,
-                fontSize = 18.sp
-            ),
+            style = AuraScreenTitle,
             color = Color.White,
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
+                .semantics { heading() }
         )
 
         Spacer(modifier = Modifier.height(30.dp))
-
-        // 5 Setting Rows matching Mockup 10:
-        // 1. Cuenta
-        // 2. Notificaciones
-        // 3. Sonido
-        // 4. Descargas (Gestor de Archivos)
-        // 5. Ayuda
-
-        SettingItemRow(
-            title = "Cuenta",
-            subtitle = "Perfil de audio local",
-            icon = Icons.Default.Person,
-            checked = accountEnabled,
-            onCheckedChange = { accountEnabled = it }
-        )
-
-        Spacer(modifier = Modifier.height(18.dp))
 
         SettingItemRow(
             title = "Notificaciones",
@@ -115,22 +95,19 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(18.dp))
 
+        // Informativo: no hay un interruptor porque el modo sin pérdida no se puede desactivar.
         SettingItemRow(
             title = "Sonido",
-            subtitle = "Modo Sin Pérdida Hi-Fi",
-            icon = Icons.Default.Settings,
-            checked = hifiLosslessEnabled,
-            onCheckedChange = onToggleHiFi
+            subtitle = "Reproducción sin pérdida (FLAC/WAV hasta 24b/192kHz)",
+            icon = Icons.Default.Settings
         )
 
         Spacer(modifier = Modifier.height(18.dp))
 
         SettingItemRow(
-            title = "Descargas",
+            title = "Música local",
             subtitle = "Gestor de archivos de música y carpetas",
             icon = Icons.Default.Download,
-            checked = downloadsLocalEnabled,
-            onCheckedChange = { downloadsLocalEnabled = it },
             onItemClick = onOpenFileExplorer
         )
 
@@ -139,12 +116,11 @@ fun SettingsScreen(
         SettingItemRow(
             title = "Ayuda",
             subtitle = "Formatos soportados, FLAC y soporte",
-            icon = Icons.Default.HelpOutline,
-            checked = false,
-            showSwitch = false,
-            onCheckedChange = {},
+            icon = Icons.AutoMirrored.Filled.HelpOutline,
             onItemClick = { showHelpDialog = true }
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         if (showHelpDialog) {
             AlertDialog(
@@ -158,7 +134,10 @@ fun SettingsScreen(
                     )
                 },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Text(
                             text = "AURA es un reproductor de música de alta fidelidad diseñado para reproducir audio local y archivos sin pérdida.",
                             style = MaterialTheme.typography.bodyMedium,
@@ -189,18 +168,30 @@ private fun SettingItemRow(
     title: String,
     subtitle: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    checked: Boolean,
-    showSwitch: Boolean = true,
-    onCheckedChange: (Boolean) -> Unit,
+    checked: Boolean = false,
+    onCheckedChange: ((Boolean) -> Unit)? = null,
     onItemClick: (() -> Unit)? = null
 ) {
+    val hasSwitch = onCheckedChange != null
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .then(
-                if (onItemClick != null) Modifier.clickable { onItemClick() }
-                else Modifier
+                when {
+                    hasSwitch -> Modifier.toggleable(
+                        value = checked,
+                        role = Role.Switch,
+                        onValueChange = onCheckedChange!!
+                    )
+                    onItemClick != null -> Modifier.clickable(
+                        role = Role.Button,
+                        onClickLabel = title,
+                        onClick = onItemClick
+                    )
+                    else -> Modifier
+                }
             ),
         color = AuraDarkSurfaceVariant.copy(alpha = 0.7f),
         border = androidx.compose.foundation.BorderStroke(1.dp, AuraCardBorder)
@@ -211,8 +202,8 @@ private fun SettingItemRow(
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = title,
-                tint = AuraPrimaryPurple,
+                contentDescription = null,
+                tint = AuraPrimaryPurpleLight,
                 modifier = Modifier.size(24.dp)
             )
 
@@ -231,10 +222,11 @@ private fun SettingItemRow(
                 )
             }
 
-            if (showSwitch) {
+            if (hasSwitch) {
+                // El estado y la etiqueta los aporta la fila toggleable; el switch no duplica el foco.
                 Switch(
                     checked = checked,
-                    onCheckedChange = onCheckedChange,
+                    onCheckedChange = null,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
                         checkedTrackColor = AuraPrimaryPurple,

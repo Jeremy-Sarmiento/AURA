@@ -11,11 +11,14 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Info
@@ -23,7 +26,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Schedule
@@ -49,6 +52,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aura.model.Song
 import com.example.aura.player.RepeatMode
+import com.example.ui.theme.AuraBadge
 import com.example.ui.theme.AuraCardBorder
 import com.example.ui.theme.AuraDarkBackground
 import com.example.ui.theme.AuraDarkSurfaceVariant
@@ -73,6 +82,7 @@ fun PlayerScreen(
     isShuffle: Boolean,
     repeatMode: RepeatMode,
     sleepTimerRemainingMs: Long,
+    hasLyrics: Boolean,
     onBack: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onSeekTo: (Long) -> Unit,
@@ -83,7 +93,8 @@ fun PlayerScreen(
     onOpenLyrics: () -> Unit,
     onOpenQueue: () -> Unit,
     onOpenSleepTimer: () -> Unit,
-    onOpenSongInfo: () -> Unit
+    onOpenSongInfo: () -> Unit,
+    onOpenArtist: (String) -> Unit
 ) {
     var isDraggingSlider by remember { mutableStateOf(false) }
     var dragProgress by remember { mutableFloatStateOf(0f) }
@@ -96,19 +107,20 @@ fun PlayerScreen(
     }
 
     val elapsedText = formatMs(if (isDraggingSlider) (dragProgress * effectiveDuration).toLong() else currentPositionMs)
-    val remainingText = formatMs(effectiveDuration)
+    val totalText = formatMs(effectiveDuration)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(AuraDarkBackground)
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp)
             .testTag("player_screen"),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Top Navigation Header: Arrow Down + "REPRODUCTOR" + Namida Hi-Fi tools (Sleep Timer & Song Info)
+        // Top Navigation Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -133,7 +145,8 @@ fun PlayerScreen(
                     letterSpacing = 2.sp,
                     fontSize = 16.sp
                 ),
-                color = Color.White
+                color = Color.White,
+                modifier = Modifier.semantics { heading() }
             )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -158,10 +171,11 @@ fun PlayerScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Big square album art card with centered music note matching Mockup 07
+        // Album art acotada: en pantallas compactas y en horizontal no debe empujar los controles fuera.
         Box(
             modifier = Modifier
                 .fillMaxWidth(0.88f)
+                .heightIn(max = 280.dp)
                 .aspectRatio(1f)
                 .shadow(
                     elevation = 28.dp,
@@ -175,7 +189,7 @@ fun PlayerScreen(
         ) {
             Icon(
                 imageVector = Icons.Default.MusicNote,
-                contentDescription = "Carátula",
+                contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(110.dp)
             )
@@ -183,9 +197,9 @@ fun PlayerScreen(
 
         Spacer(modifier = Modifier.height(30.dp))
 
-        // Title & Artist matching Mockup 07
+        // Title & Artist
         Text(
-            text = currentSong?.title ?: "Sin Pista Seleccionada",
+            text = currentSong?.title ?: "Sin pista seleccionada",
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
             color = Color.White,
             textAlign = TextAlign.Center,
@@ -201,7 +215,18 @@ fun PlayerScreen(
             color = AuraTextSecondary,
             textAlign = TextAlign.Center,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = if (currentSong != null) {
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = "Ver artista ${currentSong.artist}"
+                    ) { onOpenArtist(currentSong.artist) }
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            } else {
+                Modifier
+            }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -215,10 +240,7 @@ fun PlayerScreen(
             ) {
                 Text(
                     text = currentSong.qualityBadge,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    ),
+                    style = AuraBadge,
                     color = AuraPrimaryPurpleLight,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
@@ -227,7 +249,7 @@ fun PlayerScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Interactive Progress Scrubber Slider matching Mockup 07
+        // Progress scrubber
         Column(modifier = Modifier.fillMaxWidth()) {
             Slider(
                 value = currentProgress,
@@ -240,7 +262,12 @@ fun PlayerScreen(
                     onSeekTo(targetMs)
                     isDraggingSlider = false
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics {
+                        contentDescription = "Posición de reproducción"
+                        stateDescription = "$elapsedText de $totalText"
+                    },
                 colors = SliderDefaults.colors(
                     thumbColor = AuraPrimaryPurple,
                     activeTrackColor = AuraPrimaryPurple,
@@ -260,7 +287,7 @@ fun PlayerScreen(
                     color = AuraTextMuted
                 )
                 Text(
-                    text = remainingText,
+                    text = totalText,
                     style = MaterialTheme.typography.bodySmall,
                     color = AuraTextMuted
                 )
@@ -269,24 +296,26 @@ fun PlayerScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Playback Controls Row matching Mockup 07:
-        // [Shuffle]  [Previous]  [Big Play/Pause]  [Next]  [Repeat]
+        // Playback controls
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Shuffle
-            IconButton(onClick = onToggleShuffle) {
+            IconButton(
+                onClick = onToggleShuffle,
+                modifier = Modifier.semantics {
+                    stateDescription = if (isShuffle) "Activado" else "Desactivado"
+                }
+            ) {
                 Icon(
                     imageVector = Icons.Default.Shuffle,
                     contentDescription = "Aleatorio",
-                    tint = if (isShuffle) AuraPrimaryPurple else AuraTextSecondary,
+                    tint = if (isShuffle) AuraPrimaryPurpleLight else AuraTextSecondary,
                     modifier = Modifier.size(24.dp)
                 )
             }
 
-            // Previous
             IconButton(
                 onClick = onPrevious,
                 modifier = Modifier.size(48.dp)
@@ -299,7 +328,6 @@ fun PlayerScreen(
                 )
             }
 
-            // Big Play/Pause circular button matching Mockup 07
             Box(
                 modifier = Modifier
                     .size(68.dp)
@@ -311,7 +339,10 @@ fun PlayerScreen(
                     )
                     .clip(CircleShape)
                     .background(AuraPrimaryPurple)
-                    .clickable { onTogglePlayPause() }
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = if (isPlaying) "Pausar" else "Reproducir"
+                    ) { onTogglePlayPause() }
                     .testTag("player_play_pause_button"),
                 contentAlignment = Alignment.Center
             ) {
@@ -323,7 +354,6 @@ fun PlayerScreen(
                 )
             }
 
-            // Next
             IconButton(
                 onClick = onNext,
                 modifier = Modifier.size(48.dp)
@@ -336,18 +366,25 @@ fun PlayerScreen(
                 )
             }
 
-            // Repeat
-            IconButton(onClick = onToggleRepeat) {
+            IconButton(
+                onClick = onToggleRepeat,
+                modifier = Modifier.semantics {
+                    stateDescription = when (repeatMode) {
+                        RepeatMode.OFF -> "Desactivado"
+                        RepeatMode.ALL -> "Repetir todo"
+                        RepeatMode.ONE -> "Repetir una pista"
+                    }
+                }
+            ) {
                 Icon(
                     imageVector = when (repeatMode) {
                         RepeatMode.ONE -> Icons.Default.RepeatOne
-                        RepeatMode.ALL -> Icons.Default.Repeat
-                        RepeatMode.OFF -> Icons.Default.Repeat
+                        RepeatMode.ALL, RepeatMode.OFF -> Icons.Default.Repeat
                     },
                     contentDescription = "Repetir",
                     tint = when (repeatMode) {
                         RepeatMode.OFF -> AuraTextSecondary
-                        else -> AuraPrimaryPurple
+                        else -> AuraPrimaryPurpleLight
                     },
                     modifier = Modifier.size(24.dp)
                 )
@@ -356,41 +393,43 @@ fun PlayerScreen(
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Bottom Shortcuts: "Letras" and "Cola de Reproducción"
+        // Bottom shortcuts. "Letras" solo aparece si la pista tiene letras.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Surface(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable { onOpenLyrics() }
-                    .testTag("player_lyrics_shortcut"),
-                color = AuraDarkSurfaceVariant
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (hasLyrics) {
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable(role = Role.Button, onClickLabel = "Abrir letras") { onOpenLyrics() }
+                        .testTag("player_lyrics_shortcut"),
+                    color = AuraDarkSurfaceVariant
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.FormatQuote,
-                        contentDescription = null,
-                        tint = AuraPrimaryPurple,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Letras",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = Color.White
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FormatQuote,
+                            contentDescription = null,
+                            tint = AuraPrimaryPurpleLight,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Letras",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = Color.White
+                        )
+                    }
                 }
             }
 
             Surface(
                 modifier = Modifier
                     .clip(RoundedCornerShape(20.dp))
-                    .clickable { onOpenQueue() }
+                    .clickable(role = Role.Button, onClickLabel = "Abrir cola") { onOpenQueue() }
                     .testTag("player_queue_shortcut"),
                 color = AuraDarkSurfaceVariant
             ) {
@@ -399,9 +438,9 @@ fun PlayerScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.QueueMusic,
+                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
                         contentDescription = null,
-                        tint = AuraPrimaryPurple,
+                        tint = AuraPrimaryPurpleLight,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -414,7 +453,7 @@ fun PlayerScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 

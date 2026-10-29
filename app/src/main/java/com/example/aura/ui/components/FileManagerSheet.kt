@@ -57,6 +57,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -144,7 +148,8 @@ fun FileManagerSheet(
                         Text(
                             text = "Gestor de Archivos de Música",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White
+                            color = Color.White,
+                            modifier = Modifier.semantics { heading() }
                         )
                         Text(
                             text = "Soporte FLAC, WAV, ALAC, AIFF y MP3",
@@ -187,7 +192,10 @@ fun FileManagerSheet(
                         Text(
                             text = statusMessage ?: "Procesando archivos...",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White
+                            color = Color.White,
+                            modifier = Modifier.semantics {
+                                liveRegion = LiveRegionMode.Polite
+                            }
                         )
                     }
                 }
@@ -272,8 +280,7 @@ fun FileManagerSheet(
                                     onClick = {
                                         val parent = File(currentPath).parent
                                         onNavigateDir(parent)
-                                    },
-                                    modifier = Modifier.size(32.dp)
+                                    }
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -310,7 +317,9 @@ fun FileManagerSheet(
                             }
                         } else {
                             LazyColumn(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 items(files) { item ->
@@ -394,7 +403,13 @@ private fun FileItemRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .clickable { onClick() },
+            .then(
+                if (item.isDirectory || item.isAudio) Modifier.clickable(
+                    role = androidx.compose.ui.semantics.Role.Button,
+                    onClickLabel = if (item.isDirectory) "Abrir carpeta" else "Reproducir archivo"
+                ) { onClick() }
+                else Modifier
+            ),
         color = AuraDarkSurfaceVariant.copy(alpha = 0.7f)
     ) {
         Row(

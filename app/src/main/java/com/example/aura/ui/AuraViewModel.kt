@@ -26,7 +26,6 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 enum class AuraScreen {
-    WELCOME,
     HOME,
     SEARCH,
     LIBRARY,
@@ -90,10 +89,10 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
     // Settings toggles
-    private val _hifiLosslessEnabled = MutableStateFlow(true)
-    val hifiLosslessEnabled: StateFlow<Boolean> = _hifiLosslessEnabled.asStateFlow()
-
-    private val _notificationsEnabled = MutableStateFlow(true)
+    private val settingsPrefs = application.getSharedPreferences("aura_settings", 0)
+    private val _notificationsEnabled = MutableStateFlow(
+        settingsPrefs.getBoolean("lockscreen_controls", true)
+    )
     val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled.asStateFlow()
 
     // Filtered songs for Search screen
@@ -125,6 +124,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     init {
+        com.example.aura.service.MusicPlaybackService.showOnLockscreen = _notificationsEnabled.value
         loadInitialData()
         loadDirectory(null)
     }
@@ -132,24 +132,28 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadInitialData() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                playlistDao.insertPlaylist(
-                    PlaylistEntity(
-                        id = "playlist_favorites",
-                        name = "Mis Favoritas",
-                        description = "Tus temas preferidos siempre a mano",
-                        coverColorHex = 0xFFE85D9E,
-                        createdAt = System.currentTimeMillis() - 1000
+                if (playlistDao.getPlaylistById("playlist_favorites") == null) {
+                    playlistDao.insertPlaylist(
+                        PlaylistEntity(
+                            id = "playlist_favorites",
+                            name = "Mis Favoritas",
+                            description = "Tus temas preferidos siempre a mano",
+                            coverColorHex = 0xFFE85D9E,
+                            createdAt = System.currentTimeMillis() - 1000
+                        )
                     )
-                )
-                playlistDao.insertPlaylist(
-                    PlaylistEntity(
-                        id = "playlist_lossless",
-                        name = "Audio Sin Pérdida (Hi-Res)",
-                        description = "Colección de pistas FLAC y WAV de alta fidelidad",
-                        coverColorHex = 0xFF9155FD,
-                        createdAt = System.currentTimeMillis()
+                }
+                if (playlistDao.getPlaylistById("playlist_lossless") == null) {
+                    playlistDao.insertPlaylist(
+                        PlaylistEntity(
+                            id = "playlist_lossless",
+                            name = "Audio Sin Pérdida (Hi-Res)",
+                            description = "Colección de pistas FLAC y WAV de alta fidelidad",
+                            coverColorHex = 0xFF9155FD,
+                            createdAt = System.currentTimeMillis()
+                        )
                     )
-                )
+                }
             } catch (e: Exception) {
                 android.util.Log.e("AuraViewModel", "Error creating default playlists", e)
             }
@@ -192,11 +196,17 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Las pestañas son raíz: cambiar de pestaña no debe apilar historial.
+    fun selectTab(screen: AuraScreen) {
+        screenStack.clear()
+        _currentScreen.value = screen
+    }
+
     fun navigateBack(): Boolean {
         return if (screenStack.isNotEmpty()) {
             _currentScreen.value = screenStack.removeAt(screenStack.lastIndex)
             true
-        } else if (_currentScreen.value != AuraScreen.HOME && _currentScreen.value != AuraScreen.WELCOME) {
+        } else if (_currentScreen.value != AuraScreen.HOME) {
             _currentScreen.value = AuraScreen.HOME
             true
         } else {
@@ -243,11 +253,6 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             val song = _songs.value.find { it.id == songId } ?: return@launch
             val newFav = !song.isFavorite
             songDao.setFavorite(songId, newFav)
-
-            // Update in-memory state
-            _songs.value = _songs.value.map {
-                if (it.id == songId) it.copy(isFavorite = newFav) else it
-            }
         }
     }
 
@@ -327,8 +332,10 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
                 if (song != null) {
                     songDao.insertSong(SongEntity.fromDomain(song))
                     _statusMessage.value = "Pista importada: ${song.title}"
-                    // Auto play
-                    playerManager.playSong(song, _songs.value + song)
+                    // No cortar lo que ya suena al abrir un archivo desde el gestor.
+                    if (playerManager.currentSong.value == null) {
+                        playerManager.playSong(song, _songs.value + song)
+                    }
                 } else {
                     _statusMessage.value = "No se pudo leer el archivo de audio"
                 }
@@ -372,25 +379,16 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         _statusMessage.value = null
     }
 
-    fun toggleHiFiLossless(enabled: Boolean) {
-        _hifiLosslessEnabled.value = enabled
-    }
-
     fun toggleNotifications(enabled: Boolean) {
         _notificationsEnabled.value = enabled
+        settingsPrefs.edit().putBoolean("lockscreen_controls", enabled).apply()
+        com.example.aura.service.MusicPlaybackService.showOnLockscreen = enabled
     }
 
     // Lyrics parser
     private fun parseLrcLyrics(lrc: String): List<LyricLine> {
         if (lrc.isBlank()) {
-            return listOf(
-                LyricLine(0L, "Esta es la letra"),
-                LyricLine(4000L, "de la canción activa"),
-                LyricLine(8000L, "que se muestra aquí"),
-                LyricLine(12000L, "reproduciendo con máxima pureza"),
-                LyricLine(16000L, "en sonido de alta fidelidad"),
-                LyricLine(20000L, "AURA Music Player")
-            )
+            return emptyList()
         }
 
         val lines = mutableListOf<LyricLine>()
@@ -413,13 +411,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        return lines.ifEmpty {
-            listOf(
-                LyricLine(0L, "Esta es la letra"),
-                LyricLine(4000L, "de la canción activa"),
-                LyricLine(8000L, "que se muestra aquí")
-            )
-        }
+        return lines
     }
 
     override fun onCleared() {
