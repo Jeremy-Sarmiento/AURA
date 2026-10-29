@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,8 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,16 +35,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aura.model.Song
-import com.example.ui.theme.AuraCardBorder
+import com.example.ui.theme.AuraBadge
 import com.example.ui.theme.AuraDarkBackground
 import com.example.ui.theme.AuraDarkSurfaceVariant
 import com.example.ui.theme.AuraPrimaryPurple
+import com.example.ui.theme.AuraPrimaryPurpleLight
+import com.example.ui.theme.AuraScreenTitle
 import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
@@ -52,7 +60,8 @@ fun QueueScreen(
     currentIndex: Int,
     onBack: () -> Unit,
     onSongClick: (Song) -> Unit,
-    onRemoveFromQueue: (Int) -> Unit
+    onRemoveFromQueue: (Int) -> Unit,
+    onBackToLibrary: () -> Unit
 ) {
     val upcomingSongs = queue.filterIndexed { index, _ -> index > currentIndex }
 
@@ -65,7 +74,6 @@ fun QueueScreen(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Top Navigation Header: Back arrow & "COLA DE REPRODUCCIÓN" matching Mockup 09
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -81,13 +89,10 @@ fun QueueScreen(
 
             Text(
                 text = "COLA DE REPRODUCCIÓN",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp,
-                    fontSize = 16.sp
-                ),
+                style = AuraScreenTitle.copy(fontSize = 16.sp, letterSpacing = 1.5.sp),
                 color = Color.White,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.semantics { heading() }
             )
 
             Spacer(modifier = Modifier.width(48.dp))
@@ -95,14 +100,14 @@ fun QueueScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Section "REPRODUCIENDO" matching Mockup 09
         Text(
             text = "REPRODUCIENDO",
             style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
             ),
-            color = AuraTextSecondary
+            color = AuraTextSecondary,
+            modifier = Modifier.semantics { heading() }
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -156,58 +161,58 @@ fun QueueScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = currentSong.format,
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    color = AuraPrimaryPurple
+                                    style = AuraBadge,
+                                    color = AuraPrimaryPurpleLight
                                 )
                             }
                         }
                     }
-
-                    // Drag handle icon `≡` matching Mockup 09
-                    Icon(
-                        imageVector = Icons.Default.DragHandle,
-                        contentDescription = "Reordenar",
-                        tint = AuraTextSecondary,
-                        modifier = Modifier.size(24.dp)
-                    )
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Section "SIGUIENTE" matching Mockup 09
         Text(
             text = "SIGUIENTE (${upcomingSongs.size})",
             style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
             ),
-            color = AuraTextSecondary
+            color = AuraTextSecondary,
+            modifier = Modifier.semantics { heading() }
         )
 
         Spacer(modifier = Modifier.height(10.dp))
 
         if (upcomingSongs.isEmpty()) {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 32.dp),
-                contentAlignment = Alignment.Center
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     text = "No hay canciones siguientes en la cola",
                     color = AuraTextMuted,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onBackToLibrary,
+                    colors = ButtonDefaults.buttonColors(containerColor = AuraPrimaryPurple)
+                ) {
+                    Icon(Icons.Default.LibraryMusic, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Ir a la biblioteca")
+                }
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 itemsIndexed(upcomingSongs) { index, song ->
                     val actualQueueIndex = currentIndex + 1 + index
@@ -216,7 +221,10 @@ fun QueueScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable { onSongClick(song) },
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = "Reproducir ${song.title}"
+                            ) { onSongClick(song) },
                         color = AuraDarkSurfaceVariant.copy(alpha = 0.6f)
                     ) {
                         Row(
@@ -257,30 +265,16 @@ fun QueueScreen(
                                 )
                             }
 
-                            IconButton(
-                                onClick = { onRemoveFromQueue(actualQueueIndex) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
+                            IconButton(onClick = { onRemoveFromQueue(actualQueueIndex) }) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Quitar",
+                                    contentDescription = "Quitar ${song.title} de la cola",
                                     tint = AuraTextMuted,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
-
-                            Icon(
-                                imageVector = Icons.Default.DragHandle,
-                                contentDescription = "Reordenar",
-                                tint = AuraTextSecondary,
-                                modifier = Modifier.size(24.dp)
-                            )
                         }
                     }
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(100.dp))
                 }
             }
         }

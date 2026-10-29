@@ -39,6 +39,9 @@ class MusicPlaybackService : Service() {
         const val CHANNEL_ID = "aura_musica_primer_plano"
         const val NOTIFICATION_ID = 1001
 
+        // Controlado desde Ajustes; se aplica a la visibilidad en pantalla de bloqueo.
+        var showOnLockscreen: Boolean = true
+
         const val ACTION_PLAY_PAUSE = "com.example.aura.ACTION_PLAY_PAUSE"
         const val ACTION_NEXT = "com.example.aura.ACTION_NEXT"
         const val ACTION_PREVIOUS = "com.example.aura.ACTION_PREVIOUS"
@@ -245,7 +248,10 @@ class MusicPlaybackService : Service() {
             .setContentText(song.artist)
             .setSubText(qualityLabel)
             .setContentIntent(contentPendingIntent)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setVisibility(
+                if (showOnLockscreen) NotificationCompat.VISIBILITY_PUBLIC
+                else NotificationCompat.VISIBILITY_SECRET
+            )
             .setOngoing(isPlaying)
             .setShowWhen(false)
             .addAction(android.R.drawable.ic_media_previous, "Anterior", prevPendingIntent)
@@ -294,7 +300,8 @@ class MusicPlaybackService : Service() {
             ).apply {
                 description = "Controles de reproducción multimedia en primer plano y pantalla de bloqueo"
                 setShowBadge(false)
-                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                lockscreenVisibility = if (showOnLockscreen) Notification.VISIBILITY_PUBLIC
+                else Notification.VISIBILITY_SECRET
             }
 
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

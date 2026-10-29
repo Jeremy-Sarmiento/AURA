@@ -74,7 +74,22 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = AuraDarkBackground
                 ) {
-                    AuraApp(viewModel = viewModel)
+                    AuraApp(
+                        viewModel = viewModel,
+                        onRequestAudioPermission = {
+                            val missing = permissionsToRequest.filter { perm ->
+                                ContextCompat.checkSelfPermission(
+                                    this@MainActivity,
+                                    perm
+                                ) != PackageManager.PERMISSION_GRANTED
+                            }
+                            if (missing.isNotEmpty()) {
+                                permissionLauncher.launch(missing.toTypedArray())
+                            } else {
+                                viewModel.scanDeviceStorage()
+                            }
+                        }
+                    )
                 }
             }
         }

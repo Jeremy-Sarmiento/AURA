@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,6 +36,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +49,8 @@ import com.example.aura.model.Song
 import com.example.ui.theme.AuraDarkBackground
 import com.example.ui.theme.AuraDarkSurfaceVariant
 import com.example.ui.theme.AuraPrimaryPurple
+import com.example.ui.theme.AuraPrimaryPurpleLight
+import com.example.ui.theme.AuraScreenTitle
 import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
@@ -61,12 +67,11 @@ fun ArtistScreen(
             .fillMaxSize()
             .background(AuraDarkBackground)
             .padding(horizontal = 20.dp)
-            .testTag("artist_screen")
+            .testTag("artist_screen"),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
     ) {
         item {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Top Header: Back arrow & "ARTISTA" title matching Mockup 06
+            // Top Header: Back arrow & "ARTISTA" title
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -82,13 +87,10 @@ fun ArtistScreen(
 
                 Text(
                     text = "ARTISTA",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp,
-                        fontSize = 18.sp
-                    ),
+                    style = AuraScreenTitle,
                     color = Color.White,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.semantics { heading() }
                 )
 
                 Spacer(modifier = Modifier.width(48.dp))
@@ -96,7 +98,6 @@ fun ArtistScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Large circular artist avatar matching Mockup 06
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -110,8 +111,8 @@ fun ArtistScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Person,
-                        contentDescription = artist.name,
-                        tint = AuraPrimaryPurple,
+                        contentDescription = null,
+                        tint = AuraPrimaryPurpleLight,
                         modifier = Modifier.size(72.dp)
                     )
                 }
@@ -126,14 +127,13 @@ fun ArtistScreen(
                 )
 
                 Text(
-                    text = artist.monthlyListeners,
+                    text = "${songs.size} pistas en tu biblioteca",
                     style = MaterialTheme.typography.bodySmall,
                     color = AuraTextSecondary
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // "Seguir" button matching Mockup 06
                 if (artist.isFollowing) {
                     OutlinedButton(
                         onClick = onFollowClick,
@@ -159,87 +159,99 @@ fun ArtistScreen(
 
             Spacer(modifier = Modifier.height(30.dp))
 
-            // Section "POPULARES" matching Mockup 06
             Text(
                 text = "POPULARES",
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
                 ),
-                color = AuraTextSecondary
+                color = AuraTextSecondary,
+                modifier = Modifier.semantics { heading() }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        // Numbered list: 1, 2, 3, 4 matching Mockup 06
-        itemsIndexed(songs) { index, song ->
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable { onSongClick(song) },
-                color = AuraDarkSurfaceVariant.copy(alpha = 0.5f)
-            ) {
-                Row(
+        if (songs.isEmpty()) {
+            item {
+                Text(
+                    text = "No hay pistas de este artista en tu biblioteca",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AuraTextMuted,
+                    textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(vertical = 32.dp)
+                )
+            }
+        } else {
+            itemsIndexed(songs, key = { _, song -> song.id }) { index, song ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = "Reproducir ${song.title}"
+                        ) { onSongClick(song) },
+                    color = AuraDarkSurfaceVariant.copy(alpha = 0.5f)
                 ) {
-                    Text(
-                        text = "${index + 1}",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                        color = AuraTextSecondary,
-                        modifier = Modifier.width(26.dp)
-                    )
-
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(song.coverColorHex)),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.MusicNote,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = song.title,
+                            text = "${index + 1}",
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = song.album,
-                            style = MaterialTheme.typography.bodySmall,
                             color = AuraTextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            modifier = Modifier.width(26.dp)
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(song.coverColorHex)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = song.title,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = song.album,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AuraTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Text(
+                            text = song.durationFormatted,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AuraTextMuted
                         )
                     }
-
-                    Text(
-                        text = song.durationFormatted,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AuraTextMuted
-                    )
                 }
             }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 }

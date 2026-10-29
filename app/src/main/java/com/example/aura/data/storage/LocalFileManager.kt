@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
@@ -12,7 +13,6 @@ import com.example.aura.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.UUID
 
 class LocalFileManager(private val context: Context) {
 
@@ -69,6 +69,7 @@ class LocalFileManager(private val context: Context) {
 
                     val format = detectFormat(path, mime)
                     val isLossless = isFormatLossless(format)
+                    val specs = extractMetadataForUri(contentUri, isLossless)
 
                     songList.add(
                         Song(
@@ -80,10 +81,11 @@ class LocalFileManager(private val context: Context) {
                             uriString = contentUri.toString(),
                             filePath = path,
                             format = format,
-                            sampleRate = if (isLossless) 96000 else 44100,
-                            bitDepth = if (isLossless) 24 else 16,
-                            bitrateKbps = if (isLossless) 2304 else 320,
+                            sampleRate = specs.sampleRate,
+                            bitDepth = specs.bitDepth,
+                            bitrateKbps = specs.bitrateKbps,
                             isLossless = isLossless,
+                            lyrics = readSiblingLyrics(path),
                             coverColorHex = getPaletteColor(title.hashCode())
                         )
                     )
@@ -112,8 +114,6 @@ class LocalFileManager(private val context: Context) {
                 ?: "Álbum Local"
             val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
             val durationMs = durationStr?.toLongOrNull() ?: 0L
-            val bitrateStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
-            val bitrateKbps = (bitrateStr?.toIntOrNull() ?: 1411000) / 1000
 
             val fileName = uri.lastPathSegment ?: ""
             val format = when {
@@ -126,20 +126,24 @@ class LocalFileManager(private val context: Context) {
                 else -> "MP3"
             }
             val isLossless = isFormatLossless(format)
+            val specs = extractAudioSpecs(retriever, isLossless)
+            val localPath = if (uri.scheme == "file") uri.path else null
 
             Song(
-                id = "saf_${UUID.randomUUID()}",
+                // Id determinista: reimportar el mismo archivo no crea duplicados.
+                id = "saf_$uri",
                 title = title,
                 artist = artist,
                 album = album,
                 durationMs = durationMs,
                 uriString = uri.toString(),
-                filePath = null,
+                filePath = localPath,
                 format = format,
-                sampleRate = if (isLossless) 96000 else 44100,
-                bitDepth = if (isLossless) 24 else 16,
-                bitrateKbps = bitrateKbps,
+                sampleRate = specs.sampleRate,
+                bitDepth = specs.bitDepth,
+                bitrateKbps = specs.bitrateKbps,
                 isLossless = isLossless,
+                lyrics = readSiblingLyrics(localPath),
                 coverColorHex = getPaletteColor(title.hashCode())
             )
         } catch (e: Exception) {
@@ -151,6 +155,54 @@ class LocalFileManager(private val context: Context) {
             } catch (_: Exception) {}
         }
     }
+
+    private fun extractMetadataForUri(uri: Uri, isLossless: Boolean): AudioSpecs {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            extractAudioSpecs(retriever, isLossless)
+        } catch (_: Exception) {
+            AudioSpecs(
+                sampleRate = 44100,
+                bitDepth = 16,
+                bitrateKbps = if (isLossless) 1411 else 320
+            )
+        } finally {
+            try { retriever.release() } catch (_: Exception) {}
+        }
+    }
+
+    private fun extractAudioSpecs(
+        retriever: MediaMetadataRetriever,
+        isLossless: Boolean
+    ): AudioSpecs {
+        val sampleRateStr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
+            } catch (_: Exception) { null }
+        } else null
+
+        val bitrateStr = try {
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
+        } catch (_: Exception) { null }
+
+        val sampleRate = sampleRateStr?.toIntOrNull() ?: 44100
+        val rawBitrate = bitrateStr?.toIntOrNull()
+        val bitrateKbps = if (rawBitrate != null && rawBitrate > 0) rawBitrate / 1000 else if (isLossless) 1411 else 320
+        val bitDepth = if (sampleRate >= 88200) 24 else 16
+
+        return AudioSpecs(
+            sampleRate = sampleRate,
+            bitDepth = bitDepth,
+            bitrateKbps = bitrateKbps
+        )
+    }
+
+    private data class AudioSpecs(
+        val sampleRate: Int,
+        val bitDepth: Int,
+        val bitrateKbps: Int
+    )
 
     /**
      * Scan folder picked via SAF (OpenDocumentTree) using DocumentsContract.
@@ -224,6 +276,22 @@ class LocalFileManager(private val context: Context) {
                     sizeBytes = file.length()
                 )
             }
+    }
+
+    private fun readSiblingLyrics(audioPath: String?): String {
+        if (audioPath.isNullOrEmpty()) return ""
+        return try {
+            val audio = File(audioPath)
+            val dir = audio.parentFile ?: return ""
+            val base = audio.nameWithoutExtension
+            listOf(File(dir, "$base.lrc"), File(dir, "$base.LRC"))
+                .firstOrNull { it.isFile && it.canRead() && it.length() in 1..(512 * 1024) }
+                ?.readText()
+                ?.takeIf { it.isNotBlank() }
+                ?: ""
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     private fun detectFormat(path: String?, mime: String): String {

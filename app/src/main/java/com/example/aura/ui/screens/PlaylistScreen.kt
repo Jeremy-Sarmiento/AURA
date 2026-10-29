@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,22 +20,35 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,9 +57,14 @@ import androidx.compose.ui.unit.sp
 import com.example.aura.model.Playlist
 import com.example.aura.model.Song
 import com.example.ui.theme.AuraAccentPink
+import com.example.ui.theme.AuraBadge
 import com.example.ui.theme.AuraDarkBackground
+import com.example.ui.theme.AuraDarkSurface
 import com.example.ui.theme.AuraDarkSurfaceVariant
+import com.example.ui.theme.AuraDanger
 import com.example.ui.theme.AuraPrimaryPurple
+import com.example.ui.theme.AuraPrimaryPurpleLight
+import com.example.ui.theme.AuraScreenTitle
 import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
@@ -57,19 +76,51 @@ fun PlaylistScreen(
     onPlayAll: () -> Unit,
     onSongClick: (Song) -> Unit,
     onToggleFavorite: (String) -> Unit,
+    onRemoveSong: ((String) -> Unit)? = null,
     onDeletePlaylist: (() -> Unit)? = null
 ) {
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            containerColor = AuraDarkSurface,
+            title = { Text("Eliminar lista", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    text = "\"${playlist.name}\" y su contenido se eliminarán. Esta acción no se puede deshacer.",
+                    color = AuraTextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmDelete = false
+                        onDeletePlaylist?.invoke()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AuraDanger)
+                ) {
+                    Text("Eliminar", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) {
+                    Text("Cancelar", color = AuraTextSecondary)
+                }
+            }
+        )
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(AuraDarkBackground)
             .padding(horizontal = 20.dp)
-            .testTag("playlist_screen")
+            .testTag("playlist_screen"),
+        contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
     ) {
         item {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Top Header: Back arrow & "PLAYLIST" title matching Mockup 05
+            // Top Header: Back arrow & "PLAYLIST" title
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -85,20 +136,17 @@ fun PlaylistScreen(
 
                 Text(
                     text = "PLAYLIST",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp,
-                        fontSize = 18.sp
-                    ),
+                    style = AuraScreenTitle,
                     color = Color.White,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.semantics { heading() }
                 )
 
                 if (onDeletePlaylist != null) {
-                    IconButton(onClick = onDeletePlaylist) {
+                    IconButton(onClick = { confirmDelete = true }) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Eliminar Lista",
+                            contentDescription = "Eliminar lista",
                             tint = AuraTextSecondary
                         )
                     }
@@ -130,26 +178,30 @@ fun PlaylistScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Big Centered Purple Play Button matching Mockup 05
+                // Play-all button: disabled and visually muted when the list is empty.
                 Box(
                     modifier = Modifier
                         .size(80.dp)
                         .shadow(
-                            elevation = 20.dp,
+                            elevation = if (songs.isEmpty()) 0.dp else 20.dp,
                             shape = CircleShape,
                             spotColor = AuraPrimaryPurple,
                             ambientColor = AuraPrimaryPurple
                         )
                         .clip(CircleShape)
-                        .background(AuraPrimaryPurple)
-                        .clickable { onPlayAll() }
+                        .background(if (songs.isEmpty()) AuraDarkSurfaceVariant else AuraPrimaryPurple)
+                        .clickable(
+                            enabled = songs.isNotEmpty(),
+                            role = Role.Button,
+                            onClickLabel = "Reproducir lista"
+                        ) { onPlayAll() }
                         .testTag("playlist_play_all_button"),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Reproducir Lista",
-                        tint = Color.White,
+                        contentDescription = "Reproducir lista",
+                        tint = if (songs.isEmpty()) AuraTextMuted else Color.White,
                         modifier = Modifier.size(46.dp)
                     )
                 }
@@ -158,7 +210,6 @@ fun PlaylistScreen(
             Spacer(modifier = Modifier.height(30.dp))
         }
 
-        // Numbered track list 01, 02, 03... matching Mockup 05
         if (songs.isEmpty()) {
             item {
                 Column(
@@ -173,10 +224,17 @@ fun PlaylistScreen(
                         color = AuraTextSecondary,
                         textAlign = TextAlign.Center
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Añade canciones desde Biblioteca con el menú de cada pista.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AuraTextMuted,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
         } else {
-            itemsIndexed(songs) { index, song ->
+            itemsIndexed(songs, key = { _, song -> song.id }) { index, song ->
                 val numberFormatted = "%02d".format(index + 1)
 
                 Surface(
@@ -184,7 +242,10 @@ fun PlaylistScreen(
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .clickable { onSongClick(song) },
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = "Reproducir ${song.title}"
+                        ) { onSongClick(song) },
                     color = AuraDarkSurfaceVariant.copy(alpha = 0.5f)
                 ) {
                     Row(
@@ -193,7 +254,6 @@ fun PlaylistScreen(
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Number "01", "02", etc.
                         Text(
                             text = numberFormatted,
                             style = MaterialTheme.typography.bodyMedium.copy(
@@ -204,7 +264,6 @@ fun PlaylistScreen(
                             modifier = Modifier.width(32.dp)
                         )
 
-                        // Title & Artist
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = song.title,
@@ -225,20 +284,27 @@ fun PlaylistScreen(
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = song.format,
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        color = AuraPrimaryPurple
+                                        style = AuraBadge,
+                                        color = AuraPrimaryPurpleLight
                                     )
                                 }
                             }
                         }
 
-                        // Heart icon toggle matching Mockup 05
-                        IconButton(
-                            onClick = { onToggleFavorite(song.id) },
-                            modifier = Modifier.size(36.dp)
+                        if (onRemoveSong != null) {
+                            IconButton(onClick = { onRemoveSong(song.id) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Quitar ${song.title} de la lista",
+                                    tint = AuraTextMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        IconToggleButton(
+                            checked = song.isFavorite,
+                            onCheckedChange = { onToggleFavorite(song.id) }
                         ) {
                             Icon(
                                 imageVector = if (song.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -250,10 +316,6 @@ fun PlaylistScreen(
                     }
                 }
             }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 }

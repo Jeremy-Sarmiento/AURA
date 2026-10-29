@@ -36,13 +36,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aura.model.Song
+import com.example.ui.theme.AuraBadge
 import com.example.ui.theme.AuraDarkSurfaceVariant
 import com.example.ui.theme.AuraPrimaryPurple
+import com.example.ui.theme.AuraPrimaryPurpleLight
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
@@ -67,7 +72,10 @@ fun MiniPlayerBar(
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 6.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .clickable { onClick() }
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = "Abrir reproductor"
+                    ) { onClick() }
                     .testTag("mini_player_bar"),
                 color = AuraDarkSurfaceVariant,
                 tonalElevation = 8.dp,
@@ -81,7 +89,6 @@ fun MiniPlayerBar(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        // Song artwork badge
                         Box(
                             modifier = Modifier
                                 .size(46.dp)
@@ -91,7 +98,7 @@ fun MiniPlayerBar(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MusicNote,
-                                contentDescription = "Carátula",
+                                contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(24.dp)
                             )
@@ -99,7 +106,6 @@ fun MiniPlayerBar(
 
                         Spacer(modifier = Modifier.width(12.dp))
 
-                        // Title & Artist & Quality
                         Column(
                             modifier = Modifier.weight(1f)
                         ) {
@@ -132,11 +138,8 @@ fun MiniPlayerBar(
                                     ) {
                                         Text(
                                             text = currentSong.format,
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold
-                                            ),
-                                            color = AuraPrimaryPurple
+                                            style = AuraBadge,
+                                            color = AuraPrimaryPurpleLight
                                         )
                                     }
                                 }
@@ -145,7 +148,6 @@ fun MiniPlayerBar(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Play/Pause button
                         IconButton(
                             onClick = onTogglePlayPause,
                             modifier = Modifier
@@ -162,11 +164,7 @@ fun MiniPlayerBar(
                             )
                         }
 
-                        // Next button
-                        IconButton(
-                            onClick = onNext,
-                            modifier = Modifier.size(36.dp)
-                        ) {
+                        IconButton(onClick = onNext) {
                             Icon(
                                 imageVector = Icons.Default.SkipNext,
                                 contentDescription = "Siguiente",
@@ -175,12 +173,12 @@ fun MiniPlayerBar(
                         }
                     }
 
-                    // Progress bar line
                     LinearProgressIndicator(
                         progress = { progress.coerceIn(0f, 1f) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(2.5.dp),
+                            .height(3.dp)
+                            .semantics { contentDescription = "Progreso de la pista" },
                         color = AuraPrimaryPurple,
                         trackColor = Color.White.copy(alpha = 0.1f)
                     )

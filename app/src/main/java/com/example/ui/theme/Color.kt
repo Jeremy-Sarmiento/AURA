@@ -7,16 +7,19 @@ val AuraDarkSurface = Color(0xFF181B34)
 val AuraDarkSurfaceVariant = Color(0xFF222648)
 val AuraCardBorder = Color(0xFF2E335E)
 
-val AuraPrimaryPurple = Color(0xFF9155FD)
+// #7C3AED da 5.7:1 con texto blanco (AA); #9155FD solo daba 4.27:1.
+val AuraPrimaryPurple = Color(0xFF7C3AED)
 val AuraPrimaryPurpleLight = Color(0xFFAE80FD)
 val AuraSecondaryBlue = Color(0xFF5B78EE)
 val AuraAccentTeal = Color(0xFF2EC4B6)
 val AuraAccentPink = Color(0xFFE85D9E)
 val AuraAccentGold = Color(0xFFFFB703)
+val AuraDanger = Color(0xFFB3261E)
 
 val AuraTextPrimary = Color(0xFFFFFFFF)
 val AuraTextSecondary = Color(0xFF9098C0)
-val AuraTextMuted = Color(0xFF5B638D)
+// Aclarado desde #5B638D (3.19:1) para pasar AA en texto secundario: 4.85:1 sobre surfaceVariant.
+val AuraTextMuted = Color(0xFF8A93BB)
 
 // Mockup Genre Card Colors
 val GenrePop = Color(0xFFD6589F)

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,12 +26,14 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -49,6 +52,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,10 +63,13 @@ import androidx.compose.ui.unit.sp
 import com.example.aura.model.Playlist
 import com.example.aura.model.Song
 import com.example.ui.theme.AuraAccentPink
+import com.example.ui.theme.AuraBadge
 import com.example.ui.theme.AuraCardBorder
 import com.example.ui.theme.AuraDarkBackground
 import com.example.ui.theme.AuraDarkSurfaceVariant
 import com.example.ui.theme.AuraPrimaryPurple
+import com.example.ui.theme.AuraPrimaryPurpleLight
+import com.example.ui.theme.AuraScreenTitle
 import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
@@ -87,7 +96,7 @@ fun LibraryScreen(
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Top Bar: "BIBLIOTECA" title and "+" button matching Mockup 04
+        // Top Bar: "BIBLIOTECA" title and "+" button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -99,16 +108,12 @@ fun LibraryScreen(
 
             Text(
                 text = "BIBLIOTECA",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
-                    fontSize = 18.sp
-                ),
+                style = AuraScreenTitle,
                 color = Color.White,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.semantics { heading() }
             )
 
-            // Top-right "+" circular purple button from Mockup 04
             Box {
                 IconButton(
                     onClick = { showPlusMenu = true },
@@ -134,7 +139,7 @@ fun LibraryScreen(
                     DropdownMenuItem(
                         text = { Text("Nueva Lista de Reproducción", color = Color.White) },
                         leadingIcon = {
-                            Icon(Icons.Default.QueueMusic, contentDescription = null, tint = AuraPrimaryPurple)
+                            Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, tint = AuraPrimaryPurpleLight)
                         },
                         onClick = {
                             showPlusMenu = false
@@ -144,7 +149,7 @@ fun LibraryScreen(
                     DropdownMenuItem(
                         text = { Text("Escanear Almacenamiento Local", color = Color.White) },
                         leadingIcon = {
-                            Icon(Icons.Default.FolderOpen, contentDescription = null, tint = AuraPrimaryPurple)
+                            Icon(Icons.Default.FolderOpen, contentDescription = null, tint = AuraPrimaryPurpleLight)
                         },
                         onClick = {
                             showPlusMenu = false
@@ -157,7 +162,7 @@ fun LibraryScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Tabs: Canciones, Listas, Carpetas
+        // Tabs: Canciones, Listas, Explorar
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = Color.Transparent,
@@ -183,7 +188,7 @@ fun LibraryScreen(
             Tab(
                 selected = selectedTab == 2,
                 onClick = { selectedTab = 2 },
-                text = { Text("Carpetas", fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
+                text = { Text("Explorar", fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
             )
         }
 
@@ -191,75 +196,90 @@ fun LibraryScreen(
 
         when (selectedTab) {
             0 -> {
-                // Song list matching Mockup 04
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(songs, key = { it.id }) { song ->
-                        SongListItem(
-                            song = song,
-                            playlists = playlists,
-                            onClick = { onSongClick(song) },
-                            onToggleFavorite = { onToggleFavorite(song.id) },
-                            onAddToPlaylist = { pId -> onAddSongToPlaylist(pId, song.id) }
-                        )
-                    }
-                    item {
-                        Spacer(modifier = Modifier.height(100.dp))
+                if (songs.isEmpty()) {
+                    EmptyTabState(
+                        title = "Aún no hay canciones",
+                        message = "Escanea tu teléfono o importa una carpeta para empezar.",
+                        actionLabel = "Escanear música",
+                        onAction = onOpenFileExplorer
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp)
+                    ) {
+                        items(songs, key = { it.id }) { song ->
+                            SongListItem(
+                                song = song,
+                                playlists = playlists,
+                                onClick = { onSongClick(song) },
+                                onToggleFavorite = { onToggleFavorite(song.id) },
+                                onAddToPlaylist = { pId -> onAddSongToPlaylist(pId, song.id) }
+                            )
+                        }
                     }
                 }
             }
             1 -> {
-                // Playlists list
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(playlists, key = { it.id }) { playlist ->
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { onPlaylistClick(playlist) },
-                            color = AuraDarkSurfaceVariant
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                if (playlists.isEmpty()) {
+                    EmptyTabState(
+                        title = "Sin listas todavía",
+                        message = "Crea una lista para agrupar tus pistas favoritas.",
+                        actionLabel = "Nueva lista",
+                        onAction = onCreatePlaylistClick
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp)
+                    ) {
+                        items(playlists, key = { it.id }) { playlist ->
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable(
+                                        role = Role.Button,
+                                        onClickLabel = "Abrir ${playlist.name}"
+                                    ) { onPlaylistClick(playlist) },
+                                color = AuraDarkSurfaceVariant
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(Color(playlist.coverColorHex)),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.QueueMusic,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(26.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(14.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = playlist.name,
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        text = playlist.description.ifEmpty { "Lista personalizada" },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = AuraTextSecondary
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(Color(playlist.coverColorHex)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = playlist.name,
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = playlist.description.ifEmpty { "Lista personalizada" },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = AuraTextSecondary
+                                        )
+                                    }
                                 }
                             }
                         }
-                    }
-                    item {
-                        Spacer(modifier = Modifier.height(100.dp))
                     }
                 }
             }
@@ -281,7 +301,7 @@ fun LibraryScreen(
                         Icon(
                             imageVector = Icons.Default.Folder,
                             contentDescription = null,
-                            tint = AuraPrimaryPurple,
+                            tint = AuraPrimaryPurpleLight,
                             modifier = Modifier.size(36.dp)
                         )
                     }
@@ -289,7 +309,9 @@ fun LibraryScreen(
                     Text(
                         text = "Gestor de Archivos del Celular",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.semantics { heading() }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -300,7 +322,7 @@ fun LibraryScreen(
                         modifier = Modifier.padding(horizontal = 24.dp)
                     )
                     Spacer(modifier = Modifier.height(24.dp))
-                    androidx.compose.material3.Button(
+                    Button(
                         onClick = onOpenFileExplorer,
                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                             containerColor = AuraPrimaryPurple
@@ -312,6 +334,45 @@ fun LibraryScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyTabState(
+    title: String,
+    message: String,
+    actionLabel: String,
+    onAction: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = Color.White,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = AuraTextSecondary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 24.dp)
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Button(
+            onClick = onAction,
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                containerColor = AuraPrimaryPurple
+            )
+        ) {
+            Text(actionLabel)
         }
     }
 }
@@ -330,14 +391,16 @@ private fun SongListItem(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .clickable { onClick() },
+            .clickable(
+                role = Role.Button,
+                onClickLabel = "Reproducir ${song.title}"
+            ) { onClick() },
         color = AuraDarkSurfaceVariant.copy(alpha = 0.85f)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Music note icon matching Mockup 04
             Box(
                 modifier = Modifier
                     .size(42.dp)
@@ -355,7 +418,6 @@ private fun SongListItem(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Title & Artist lines matching Mockup 04
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = song.title,
@@ -382,39 +444,34 @@ private fun SongListItem(
                         ) {
                             Text(
                                 text = song.format,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = AuraPrimaryPurple
+                                style = AuraBadge,
+                                color = AuraPrimaryPurpleLight
                             )
                         }
                     }
                 }
             }
 
-            IconButton(
-                onClick = onToggleFavorite,
-                modifier = Modifier.size(32.dp)
+            // IconToggleButton expone el estado marcado/no marcado a TalkBack.
+            IconToggleButton(
+                checked = song.isFavorite,
+                onCheckedChange = { onToggleFavorite() }
             ) {
                 Icon(
                     imageVector = if (song.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = "Favorito",
                     tint = if (song.isFavorite) AuraAccentPink else AuraTextMuted,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
             Box {
-                IconButton(
-                    onClick = { showMenu = true },
-                    modifier = Modifier.size(32.dp)
-                ) {
+                IconButton(onClick = { showMenu = true }) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Opciones",
+                        contentDescription = "Opciones de ${song.title}",
                         tint = AuraTextSecondary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -423,14 +480,21 @@ private fun SongListItem(
                     onDismissRequest = { showMenu = false },
                     modifier = Modifier.background(AuraDarkSurfaceVariant)
                 ) {
-                    playlists.forEach { pl ->
+                    if (playlists.isEmpty()) {
                         DropdownMenuItem(
-                            text = { Text("Añadir a \"${pl.name}\"", color = Color.White) },
-                            onClick = {
-                                showMenu = false
-                                onAddToPlaylist(pl.id)
-                            }
+                            text = { Text("No hay listas creadas", color = AuraTextSecondary) },
+                            onClick = { showMenu = false }
                         )
+                    } else {
+                        playlists.forEach { pl ->
+                            DropdownMenuItem(
+                                text = { Text("Añadir a \"${pl.name}\"", color = Color.White) },
+                                onClick = {
+                                    showMenu = false
+                                    onAddToPlaylist(pl.id)
+                                }
+                            )
+                        }
                     }
                 }
             }

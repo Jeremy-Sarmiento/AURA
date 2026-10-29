@@ -1,9 +1,15 @@
 package com.example.aura.player
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import com.example.aura.model.Song
 import kotlinx.coroutines.CoroutineScope
@@ -20,11 +26,15 @@ enum class RepeatMode {
     OFF, ALL, ONE
 }
 
-class AudioPlayerManager(private val context: Context) {
+class AudioPlayerManager private constructor(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main)
     private var mediaPlayer: MediaPlayer? = null
     private var progressJob: Job? = null
+
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var isNoisyReceiverRegistered = false
 
     private val _currentSong = MutableStateFlow<Song?>(null)
     val currentSong: StateFlow<Song?> = _currentSong.asStateFlow()
@@ -53,6 +63,36 @@ class AudioPlayerManager(private val context: Context) {
     private var sleepTimerJob: Job? = null
     private val _sleepTimerRemainingMs = MutableStateFlow(0L)
     val sleepTimerRemainingMs: StateFlow<Long> = _sleepTimerRemainingMs.asStateFlow()
+
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                pausePlayback()
+                abandonAudioFocus()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                pausePlayback()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                try {
+                    mediaPlayer?.setVolume(0.3f, 0.3f)
+                } catch (_: Exception) {}
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                try {
+                    mediaPlayer?.setVolume(1.0f, 1.0f)
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    private val noisyReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY) {
+                pausePlayback()
+            }
+        }
+    }
 
     fun setSleepTimer(minutes: Int) {
         cancelSleepTimer()
@@ -99,18 +139,21 @@ class AudioPlayerManager(private val context: Context) {
             }
             setOnErrorListener { _, what, extra ->
                 Log.e("AudioPlayerManager", "MediaPlayer error: what=$what extra=$extra")
-                _isPlaying.value = false
+                pausePlayback()
                 true
             }
             setOnPreparedListener { mp ->
                 _durationMs.value = mp.duration.toLong().coerceAtLeast(0L)
-                mp.start()
-                _isPlaying.value = true
-                startProgressTracker()
-                try {
-                    com.example.aura.service.MusicPlaybackService.startService(context)
-                } catch (e: Exception) {
-                    Log.w("AudioPlayerManager", "Notification service start: ${e.message}")
+                if (requestAudioFocus()) {
+                    mp.start()
+                    _isPlaying.value = true
+                    startProgressTracker()
+                    registerNoisyReceiver()
+                    try {
+                        com.example.aura.service.MusicPlaybackService.startService(context)
+                    } catch (e: Exception) {
+                        Log.w("AudioPlayerManager", "Notification service start: ${e.message}")
+                    }
                 }
             }
         }
@@ -161,30 +204,37 @@ class AudioPlayerManager(private val context: Context) {
         }
 
         if (mp.isPlaying) {
-            mp.pause()
-            _isPlaying.value = false
-            stopProgressTracker()
+            pausePlayback()
+            abandonAudioFocus()
         } else {
-            mp.start()
-            _isPlaying.value = true
-            startProgressTracker()
+            if (requestAudioFocus()) {
+                mp.start()
+                _isPlaying.value = true
+                startProgressTracker()
+                registerNoisyReceiver()
+                try {
+                    com.example.aura.service.MusicPlaybackService.startService(context)
+                } catch (_: Exception) {}
+            }
         }
-        try {
-            com.example.aura.service.MusicPlaybackService.startService(context)
-        } catch (_: Exception) {}
     }
 
-    fun stop() {
+    private fun pausePlayback() {
         try {
             mediaPlayer?.let { mp ->
                 if (mp.isPlaying) {
                     mp.pause()
                 }
-                mp.seekTo(0)
             }
         } catch (_: Exception) {}
         _isPlaying.value = false
         stopProgressTracker()
+        unregisterNoisyReceiver()
+    }
+
+    fun stop() {
+        pausePlayback()
+        abandonAudioFocus()
     }
 
     fun seekTo(positionMs: Long) {
@@ -219,9 +269,7 @@ class AudioPlayerManager(private val context: Context) {
             _currentIndex.value = 0
             playTrack(q[0])
         } else {
-            mediaPlayer?.pause()
-            _isPlaying.value = false
-            stopProgressTracker()
+            stop()
         }
     }
 
@@ -229,7 +277,6 @@ class AudioPlayerManager(private val context: Context) {
         val q = _queue.value
         if (q.isEmpty()) return
 
-        // If played more than 3 seconds, replay current track
         if (_currentPositionMs.value > 3000L) {
             seekTo(0L)
             return
@@ -289,9 +336,8 @@ class AudioPlayerManager(private val context: Context) {
                 _currentIndex.value = nextIdx
                 playTrack(curList[nextIdx])
             } else if (curList.isEmpty()) {
-                mediaPlayer?.stop()
+                stop()
                 _currentSong.value = null
-                _isPlaying.value = false
             }
         }
     }
@@ -307,6 +353,64 @@ class AudioPlayerManager(private val context: Context) {
             if (newCurrentIndex >= 0) {
                 _currentIndex.value = newCurrentIndex
             }
+        }
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        val am = audioManager ?: return true
+        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val audioAttributes = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .build()
+            val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(audioAttributes)
+                .setAcceptsDelayedFocusGain(true)
+                .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                .build()
+            audioFocusRequest = focusRequest
+            am.requestAudioFocus(focusRequest)
+        } else {
+            @Suppress("DEPRECATION")
+            am.requestAudioFocus(
+                audioFocusChangeListener,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN
+            )
+        }
+        return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+
+    private fun abandonAudioFocus() {
+        val am = audioManager ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { am.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            am.abandonAudioFocus(audioFocusChangeListener)
+        }
+    }
+
+    private fun registerNoisyReceiver() {
+        if (!isNoisyReceiverRegistered) {
+            try {
+                context.registerReceiver(
+                    noisyReceiver,
+                    IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+                )
+                isNoisyReceiverRegistered = true
+            } catch (e: Exception) {
+                Log.w("AudioPlayerManager", "Failed to register noisy receiver", e)
+            }
+        }
+    }
+
+    private fun unregisterNoisyReceiver() {
+        if (isNoisyReceiverRegistered) {
+            try {
+                context.unregisterReceiver(noisyReceiver)
+            } catch (_: Exception) {}
+            isNoisyReceiverRegistered = false
         }
     }
 
@@ -332,6 +436,8 @@ class AudioPlayerManager(private val context: Context) {
 
     fun releasePlayer() {
         stopProgressTracker()
+        unregisterNoisyReceiver()
+        abandonAudioFocus()
         cancelSleepTimer()
         try {
             mediaPlayer?.release()

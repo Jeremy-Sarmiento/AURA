@@ -39,13 +39,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aura.ui.components.CreatePlaylistDialog
 import com.example.aura.ui.components.FileManagerSheet
+import com.example.aura.ui.components.MiniPlayerBar
 import com.example.aura.ui.components.SleepTimerDialog
 import com.example.aura.ui.components.SongInfoDialog
-import com.example.aura.ui.components.MiniPlayerBar
 import com.example.aura.ui.screens.ArtistScreen
 import com.example.aura.ui.screens.HomeScreen
 import com.example.aura.ui.screens.LibraryScreen
@@ -55,16 +57,36 @@ import com.example.aura.ui.screens.PlaylistScreen
 import com.example.aura.ui.screens.QueueScreen
 import com.example.aura.ui.screens.SearchScreen
 import com.example.aura.ui.screens.SettingsScreen
-import com.example.aura.ui.screens.WelcomeScreen
 import com.example.ui.theme.AuraDarkBackground
 import com.example.ui.theme.AuraDarkSurface
-import com.example.ui.theme.AuraDarkSurfaceVariant
 import com.example.ui.theme.AuraPrimaryPurple
 import com.example.ui.theme.AuraTextSecondary
 
+private val mainTabs = listOf(
+    AuraScreen.HOME,
+    AuraScreen.SEARCH,
+    AuraScreen.LIBRARY,
+    AuraScreen.SETTINGS
+)
+
+private fun screenTitle(screen: AuraScreen): String = when (screen) {
+    AuraScreen.HOME -> "Inicio"
+    AuraScreen.SEARCH -> "Buscar"
+    AuraScreen.LIBRARY -> "Biblioteca"
+    AuraScreen.SETTINGS -> "Ajustes"
+    AuraScreen.PLAYLIST_DETAIL -> "Lista de reproducción"
+    AuraScreen.ARTIST_DETAIL -> "Artista"
+    AuraScreen.PLAYER -> "Reproductor"
+    AuraScreen.LYRICS -> "Letras"
+    AuraScreen.QUEUE -> "Cola de reproducción"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AuraApp(viewModel: AuraViewModel) {
+fun AuraApp(
+    viewModel: AuraViewModel,
+    onRequestAudioPermission: () -> Unit = {}
+) {
     val currentScreen by viewModel.currentScreen.collectAsState()
     val songs by viewModel.songs.collectAsState()
     val playlists by viewModel.playlists.collectAsState()
@@ -78,7 +100,6 @@ fun AuraApp(viewModel: AuraViewModel) {
     val statusMessage by viewModel.statusMessage.collectAsState()
     val currentDirPath by viewModel.currentDirectoryPath.collectAsState()
     val directoryFiles by viewModel.directoryFiles.collectAsState()
-    val hifiLosslessEnabled by viewModel.hifiLosslessEnabled.collectAsState()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
 
     // Player state
@@ -108,7 +129,7 @@ fun AuraApp(viewModel: AuraViewModel) {
     }
 
     // Android Hardware/System Back Button Handling
-    BackHandler(enabled = currentScreen != AuraScreen.HOME && currentScreen != AuraScreen.WELCOME) {
+    BackHandler(enabled = currentScreen != AuraScreen.HOME) {
         viewModel.navigateBack()
     }
 
@@ -166,21 +187,16 @@ fun AuraApp(viewModel: AuraViewModel) {
         containerColor = AuraDarkBackground,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            // Show bottom navigation & miniplayer only on main tab screens
-            val isMainTab = currentScreen in listOf(
-                AuraScreen.HOME,
-                AuraScreen.SEARCH,
-                AuraScreen.LIBRARY,
-                AuraScreen.SETTINGS
-            )
+            // El mini player acompaña a todas las pantallas salvo el reproductor y las letras.
+            val showMiniPlayer = currentScreen != AuraScreen.PLAYER &&
+                    currentScreen != AuraScreen.LYRICS
 
-            if (isMainTab) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                ) {
-                    // Floating Mini Player Bar
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+            ) {
+                if (showMiniPlayer) {
                     MiniPlayerBar(
                         currentSong = currentSong,
                         isPlaying = isPlaying,
@@ -189,8 +205,9 @@ fun AuraApp(viewModel: AuraViewModel) {
                         onNext = { playerManager.next() },
                         onClick = { viewModel.navigateTo(AuraScreen.PLAYER) }
                     )
+                }
 
-                    // Bottom Navigation Bar matching Mockup 02
+                if (currentScreen in mainTabs) {
                     NavigationBar(
                         containerColor = AuraDarkSurface,
                         tonalElevation = 6.dp,
@@ -198,61 +215,33 @@ fun AuraApp(viewModel: AuraViewModel) {
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                     ) {
-                        NavigationBarItem(
-                            selected = currentScreen == AuraScreen.HOME,
-                            onClick = { viewModel.navigateTo(AuraScreen.HOME) },
-                            icon = { Icon(Icons.Default.Home, contentDescription = "Inicio") },
-                            label = { Text("Inicio", fontSize = 11.sp) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color.White,
-                                selectedTextColor = Color.White,
-                                indicatorColor = AuraPrimaryPurple,
-                                unselectedIconColor = AuraTextSecondary,
-                                unselectedTextColor = AuraTextSecondary
+                        mainTabs.forEach { tab ->
+                            val label = screenTitle(tab)
+                            NavigationBarItem(
+                                selected = currentScreen == tab,
+                                onClick = { viewModel.selectTab(tab) },
+                                icon = {
+                                    Icon(
+                                        imageVector = when (tab) {
+                                            AuraScreen.HOME -> Icons.Default.Home
+                                            AuraScreen.SEARCH -> Icons.Default.Search
+                                            AuraScreen.LIBRARY -> Icons.Default.LibraryMusic
+                                            else -> Icons.Default.Person
+                                        },
+                                        // La etiqueta ya nombra el destino.
+                                        contentDescription = null
+                                    )
+                                },
+                                label = { Text(label, fontSize = 11.sp) },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = Color.White,
+                                    selectedTextColor = Color.White,
+                                    indicatorColor = AuraPrimaryPurple,
+                                    unselectedIconColor = AuraTextSecondary,
+                                    unselectedTextColor = AuraTextSecondary
+                                )
                             )
-                        )
-
-                        NavigationBarItem(
-                            selected = currentScreen == AuraScreen.SEARCH,
-                            onClick = { viewModel.navigateTo(AuraScreen.SEARCH) },
-                            icon = { Icon(Icons.Default.Search, contentDescription = "Buscar") },
-                            label = { Text("Buscar", fontSize = 11.sp) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color.White,
-                                selectedTextColor = Color.White,
-                                indicatorColor = AuraPrimaryPurple,
-                                unselectedIconColor = AuraTextSecondary,
-                                unselectedTextColor = AuraTextSecondary
-                            )
-                        )
-
-                        NavigationBarItem(
-                            selected = currentScreen == AuraScreen.LIBRARY,
-                            onClick = { viewModel.navigateTo(AuraScreen.LIBRARY) },
-                            icon = { Icon(Icons.Default.LibraryMusic, contentDescription = "Biblioteca") },
-                            label = { Text("Biblioteca", fontSize = 11.sp) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color.White,
-                                selectedTextColor = Color.White,
-                                indicatorColor = AuraPrimaryPurple,
-                                unselectedIconColor = AuraTextSecondary,
-                                unselectedTextColor = AuraTextSecondary
-                            )
-                        )
-
-                        NavigationBarItem(
-                            selected = currentScreen == AuraScreen.SETTINGS,
-                            onClick = { viewModel.navigateTo(AuraScreen.SETTINGS) },
-                            icon = { Icon(Icons.Default.Person, contentDescription = "Ajustes") },
-                            label = { Text("Ajustes", fontSize = 11.sp) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color.White,
-                                selectedTextColor = Color.White,
-                                indicatorColor = AuraPrimaryPurple,
-                                unselectedIconColor = AuraTextSecondary,
-                                unselectedTextColor = AuraTextSecondary
-                            )
-                        )
+                        }
                     }
                 }
             }
@@ -262,6 +251,7 @@ fun AuraApp(viewModel: AuraViewModel) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .semantics { paneTitle = screenTitle(currentScreen) }
         ) {
             AnimatedContent(
                 targetState = currentScreen,
@@ -269,30 +259,25 @@ fun AuraApp(viewModel: AuraViewModel) {
                 label = "ScreenTransition"
             ) { screen ->
                 when (screen) {
-                    AuraScreen.WELCOME -> {
-                        WelcomeScreen(
-                            onStartClick = { viewModel.navigateTo(AuraScreen.HOME) },
-                            onRegisterClick = { viewModel.navigateTo(AuraScreen.HOME) }
-                        )
-                    }
-
                     AuraScreen.HOME -> {
                         HomeScreen(
                             songs = songs,
                             playlists = playlists,
                             onSongClick = { song -> playerManager.playSong(song, songs) },
                             onPlaylistClick = { pl -> viewModel.openPlaylist(pl) },
-                            onOpenFileExplorer = { showFileManagerSheet = true }
+                            onOpenFileExplorer = { showFileManagerSheet = true },
+                            onRequestPermission = onRequestAudioPermission
                         )
                     }
 
                     AuraScreen.SEARCH -> {
                         SearchScreen(
                             query = searchQuery,
-                            selectedGenre = selectedGenre,
+                            selectedArtist = selectedGenre,
+                            songs = songs,
                             results = searchResults,
                             onQueryChange = { viewModel.setSearchQuery(it) },
-                            onSelectGenre = { viewModel.selectGenre(it) },
+                            onSelectArtist = { viewModel.selectGenre(it) },
                             onSongClick = { song -> playerManager.playSong(song, searchResults) }
                         )
                     }
@@ -312,12 +297,17 @@ fun AuraApp(viewModel: AuraViewModel) {
 
                     AuraScreen.PLAYLIST_DETAIL -> {
                         val playlist = selectedPlaylist
-                        if (playlist != null) {
+                        if (playlist == null) {
+                            LaunchedEffect(Unit) { viewModel.navigateBack() }
+                        } else {
                             val playlistSongs = when (playlist.id) {
                                 "playlist_favorites" -> songs.filter { it.isFavorite }
                                 "playlist_lossless" -> songs.filter { it.isLossless }
-                                else -> songs.filter { playlist.songIds.contains(it.id) }
+                                else -> playlist.songIds.mapNotNull { id -> songs.find { it.id == id } }
                             }
+                            val isEditable = playlist.isCustom &&
+                                    playlist.id != "playlist_lossless" &&
+                                    playlist.id != "playlist_favorites"
                             PlaylistScreen(
                                 playlist = playlist,
                                 songs = playlistSongs,
@@ -331,28 +321,29 @@ fun AuraApp(viewModel: AuraViewModel) {
                                     playerManager.playSong(song, playlistSongs)
                                 },
                                 onToggleFavorite = { id -> viewModel.toggleFavorite(id) },
-                                onDeletePlaylist = if (playlist.isCustom && playlist.id != "playlist_lossless" && playlist.id != "playlist_favorites") {
+                                onRemoveSong = if (isEditable) {
+                                    { songId -> viewModel.removeSongFromPlaylist(playlist.id, songId) }
+                                } else null,
+                                onDeletePlaylist = if (isEditable) {
                                     { viewModel.deletePlaylist(playlist.id) }
                                 } else null
                             )
-                        } else {
-                            viewModel.navigateTo(AuraScreen.HOME)
                         }
                     }
 
                     AuraScreen.ARTIST_DETAIL -> {
                         val artist = selectedArtist
-                        if (artist != null) {
+                        if (artist == null) {
+                            LaunchedEffect(Unit) { viewModel.navigateBack() }
+                        } else {
                             val artistSongs = songs.filter { it.artist.equals(artist.name, ignoreCase = true) }
                             ArtistScreen(
                                 artist = artist,
-                                songs = artistSongs.ifEmpty { songs.take(5) },
+                                songs = artistSongs,
                                 onBack = { viewModel.navigateBack() },
                                 onFollowClick = { viewModel.toggleFollowArtist() },
                                 onSongClick = { song -> playerManager.playSong(song, artistSongs) }
                             )
-                        } else {
-                            viewModel.navigateTo(AuraScreen.HOME)
                         }
                     }
 
@@ -365,6 +356,7 @@ fun AuraApp(viewModel: AuraViewModel) {
                             isShuffle = isShuffle,
                             repeatMode = repeatMode,
                             sleepTimerRemainingMs = sleepTimerRemainingMs,
+                            hasLyrics = parsedLyrics.isNotEmpty(),
                             onBack = { viewModel.navigateBack() },
                             onTogglePlayPause = { playerManager.togglePlayPause() },
                             onSeekTo = { playerManager.seekTo(it) },
@@ -375,7 +367,8 @@ fun AuraApp(viewModel: AuraViewModel) {
                             onOpenLyrics = { viewModel.navigateTo(AuraScreen.LYRICS) },
                             onOpenQueue = { viewModel.navigateTo(AuraScreen.QUEUE) },
                             onOpenSleepTimer = { showSleepTimerDialog = true },
-                            onOpenSongInfo = { showSongInfoDialog = true }
+                            onOpenSongInfo = { showSongInfoDialog = true },
+                            onOpenArtist = { name -> viewModel.openArtist(name) }
                         )
                     }
 
@@ -396,15 +389,14 @@ fun AuraApp(viewModel: AuraViewModel) {
                             currentIndex = currentIndex,
                             onBack = { viewModel.navigateBack() },
                             onSongClick = { song -> playerManager.playSong(song, queue) },
-                            onRemoveFromQueue = { idx -> playerManager.removeFromQueue(idx) }
+                            onRemoveFromQueue = { idx -> playerManager.removeFromQueue(idx) },
+                            onBackToLibrary = { viewModel.selectTab(AuraScreen.LIBRARY) }
                         )
                     }
 
                     AuraScreen.SETTINGS -> {
                         SettingsScreen(
-                            hifiLosslessEnabled = hifiLosslessEnabled,
                             notificationsEnabled = notificationsEnabled,
-                            onToggleHiFi = { viewModel.toggleHiFiLossless(it) },
                             onToggleNotifications = { viewModel.toggleNotifications(it) },
                             onOpenFileExplorer = { showFileManagerSheet = true }
                         )
