@@ -1,5 +1,12 @@
 package com.example.aura.ui.screens
 
+/**
+ * ARCHIVO: SettingsScreen.kt
+ * FUNCIÓN: Pantalla de ajustes: cuenta, notificaciones, sonido Hi-Fi, descargas/gestor de archivos
+ *          y diálogo de ayuda con los formatos soportados.
+ * NAVEGACIÓN: AuraApp (AuraScreen.SETTINGS) -> SettingsScreen -> ViewModel / gestor de archivos.
+ */
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +58,9 @@ import com.example.ui.theme.AuraPrimaryPurple
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
+/**
+ * SettingsScreen: lista de ajustes con switches y acceso al gestor de archivos.
+ */
 fun SettingsScreen(
     hifiLosslessEnabled: Boolean,
     notificationsEnabled: Boolean,
@@ -185,6 +195,9 @@ fun SettingsScreen(
 }
 
 @Composable
+/**
+ * SettingItemRow: fila reutilizable de ajuste (icono + título + subtítulo + switch opcional).
+ */
 private fun SettingItemRow(
     title: String,
     subtitle: String,

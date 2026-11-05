@@ -1,5 +1,13 @@
 package com.example.aura.ui
 
+/**
+ * ARCHIVO: AuraApp.kt
+ * FUNCIÓN: Contenedor principal de la interfaz Compose. Recoge todo el estado del ViewModel y del
+ *          reproductor, dibuja la barra inferior (mini player + navegación) y decide qué pantalla
+ *          mostrar según AuraScreen. También aloja los diálogos y el gestor de archivos (sheet).
+ * NAVEGACIÓN: MainActivity -> AuraApp -> carpeta ui/screens y carpeta ui/components.
+ */
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -64,7 +72,12 @@ import com.example.ui.theme.AuraTextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+/**
+ * AuraApp: raíz de la UI. Observa el estado (ViewModel + AudioPlayerManager), gestiona los
+ * diálogos y hace la transición animada entre pantallas.
+ */
 fun AuraApp(viewModel: AuraViewModel) {
+    // Estado de navegación, biblioteca, búsqueda, archivos y ajustes (StateFlow -> Compose).
     val currentScreen by viewModel.currentScreen.collectAsState()
     val songs by viewModel.songs.collectAsState()
     val playlists by viewModel.playlists.collectAsState()
@@ -82,6 +95,7 @@ fun AuraApp(viewModel: AuraViewModel) {
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
 
     // Player state
+    // Estado en vivo del reproductor compartido (pista, cola, progreso, shuffle, sleep timer).
     val playerManager = viewModel.playerManager
     val currentSong by playerManager.currentSong.collectAsState()
     val isPlaying by playerManager.isPlaying.collectAsState()
@@ -93,6 +107,7 @@ fun AuraApp(viewModel: AuraViewModel) {
     val repeatMode by playerManager.repeatMode.collectAsState()
     val sleepTimerRemainingMs by playerManager.sleepTimerRemainingMs.collectAsState()
 
+    // Estado local de la UI: snackbar, sheet del gestor de archivos y visibilidad de diálogos.
     val snackbarHostState = remember { SnackbarHostState() }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showFileManagerSheet by remember { mutableStateOf(false) }
@@ -100,6 +115,7 @@ fun AuraApp(viewModel: AuraViewModel) {
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showSongInfoDialog by remember { mutableStateOf(false) }
 
+    // Muestra en un Snackbar el mensaje de estado del ViewModel (escaneos, importaciones, etc.).
     LaunchedEffect(statusMessage) {
         statusMessage?.let {
             snackbarHostState.showSnackbar(it)
@@ -108,6 +124,7 @@ fun AuraApp(viewModel: AuraViewModel) {
     }
 
     // Android Hardware/System Back Button Handling
+    // Botón atrás del sistema: delega en la pila de navegación del ViewModel.
     BackHandler(enabled = currentScreen != AuraScreen.HOME && currentScreen != AuraScreen.WELCOME) {
         viewModel.navigateBack()
     }
@@ -115,6 +132,7 @@ fun AuraApp(viewModel: AuraViewModel) {
     val progress = if (durationMs > 0) (currentPosMs.toFloat() / durationMs.toFloat()) else 0f
 
     // Dialogs
+    // Diálogo: crear una nueva lista de reproducción.
     if (showCreatePlaylistDialog) {
         CreatePlaylistDialog(
             onDismiss = { showCreatePlaylistDialog = false },
@@ -125,6 +143,7 @@ fun AuraApp(viewModel: AuraViewModel) {
         )
     }
 
+    // Diálogo: temporizador de apagado (sleep timer).
     if (showSleepTimerDialog) {
         SleepTimerDialog(
             remainingMs = sleepTimerRemainingMs,
@@ -134,6 +153,7 @@ fun AuraApp(viewModel: AuraViewModel) {
         )
     }
 
+    // Diálogo: información técnica de la pista actual.
     if (showSongInfoDialog && currentSong != null) {
         SongInfoDialog(
             song = currentSong!!,
@@ -141,6 +161,7 @@ fun AuraApp(viewModel: AuraViewModel) {
         )
     }
 
+    // Hoja inferior: gestor de archivos (escanear, importar archivos/carpetas, explorar).
     if (showFileManagerSheet) {
         FileManagerSheet(
             sheetState = sheetState,
@@ -166,7 +187,7 @@ fun AuraApp(viewModel: AuraViewModel) {
         containerColor = AuraDarkBackground,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            // Show bottom navigation & miniplayer only on main tab screens
+            // La barra inferior (mini player + pestañas) solo aparece en las pantallas principales.
             val isMainTab = currentScreen in listOf(
                 AuraScreen.HOME,
                 AuraScreen.SEARCH,
@@ -268,6 +289,7 @@ fun AuraApp(viewModel: AuraViewModel) {
                 transitionSpec = { fadeIn() togetherWith fadeOut() },
                 label = "ScreenTransition"
             ) { screen ->
+                // Router principal: cada valor de AuraScreen renderiza su pantalla correspondiente.
                 when (screen) {
                     AuraScreen.WELCOME -> {
                         WelcomeScreen(

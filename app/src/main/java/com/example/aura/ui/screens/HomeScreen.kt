@@ -1,5 +1,12 @@
 package com.example.aura.ui.screens
 
+/**
+ * ARCHIVO: HomeScreen.kt
+ * FUNCIÓN: Pantalla de inicio. Muestra accesos rápidos (gestor local / favoritas), el carrusel de
+ *          listas de reproducción y las últimas pistas locales.
+ * NAVEGACIÓN: AuraApp (AuraScreen.HOME) -> HomeScreen; callbacks -> AuraViewModel/playerManager.
+ */
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +54,10 @@ import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
+/**
+ * HomeScreen: inicio con tarjetas destacadas, listas y pistas recientes.
+ * onSongClick reproduce; onPlaylistClick navega al detalle; onOpenFileExplorer abre el gestor.
+ */
 fun HomeScreen(
     songs: List<Song>,
     playlists: List<Playlist>,
@@ -281,6 +292,9 @@ fun HomeScreen(
 }
 
 @Composable
+/**
+ * FeaturedCard: tarjeta grande de acceso rápido (Gestor Local / Mis Favoritas).
+ */
 private fun FeaturedCard(
     title: String,
     subtitle: String,

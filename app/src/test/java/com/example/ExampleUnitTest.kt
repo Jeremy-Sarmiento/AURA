@@ -1,5 +1,10 @@
 package com.example
 
+/**
+ * ARCHIVO: ExampleUnitTest.kt
+ * FUNCIÓN: Prueba unitaria básica de ejemplo que valida la configuración de JUnit en el módulo.
+ */
+
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -9,6 +14,7 @@ import org.junit.Test
  * See [testing documentation](http://d.android.com/tools/testing).
  */
 class ExampleUnitTest {
+  // Prueba trivial de humo para verificar que el runner de tests funciona.
   @Test
   fun addition_isCorrect() {
     assertEquals(4, 2 + 2)

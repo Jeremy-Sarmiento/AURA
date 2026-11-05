@@ -1,5 +1,10 @@
+// ARCHIVO: app/build.gradle.kts
+// FUNCIÓN: Configuración del módulo Android "app": SDK, firma, build types, Compose, dependencias
+//          (Compose, Room, Media, Firebase, coroutines, tests) y plugin de secretos (.env).
+// NAVEGACIÓN: build.gradle.kts (raíz) -> app/build.gradle.kts -> gradle/libs.versions.toml
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 
+// Plugins aplicados al módulo: Android, Compose, KSP (Room/Moshi), Secrets y Google Services.
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
@@ -8,6 +13,7 @@ plugins {
   alias(libs.plugins.google.services)
 }
 
+// Configuración Android: namespace, SDKs, versión y runner de tests.
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
@@ -22,6 +28,7 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
+  // Firma: release con keystore externo y debug con debug.keystore del proyecto.
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,
   // and updating Android apps in AI Studio.
   signingConfigs {
@@ -40,6 +47,7 @@ android {
     }
   }
 
+  // Tipos de compilación: release (sin minify) y debug (firma de depuración).
   buildTypes {
     release {
       isCrunchPngs = false
@@ -55,6 +63,7 @@ android {
       signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
+  // Opciones de compilación Java y features (Compose, BuildConfig).
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
@@ -70,6 +79,7 @@ android {
   }
 }
 
+// Plugin de secretos: lee claves desde .env (con .env.example como plantilla).
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
 // to match the convention used in Web projects.
 secrets {
@@ -78,8 +88,10 @@ secrets {
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
 }
 
+// Google Services: solo advierte si falta google-services.json (no rompe el build).
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
+// Dependencias del módulo. Las versiones se declaran en gradle/libs.versions.toml.
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {

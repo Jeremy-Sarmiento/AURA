@@ -1,5 +1,13 @@
 package com.example.aura.ui.screens
 
+/**
+ * ARCHIVO: PlayerScreen.kt
+ * FUNCIÓN: Reproductor a pantalla completa: carátula, título/artista, insignia de calidad, barra de
+ *          progreso y controles (shuffle, anterior, play/pausa, siguiente, repeat, sleep timer,
+ *          info de pista, letras y cola).
+ * NAVEGACIÓN: AuraApp (AuraScreen.PLAYER) -> PlayerScreen -> AudioPlayerManager / ViewModel.
+ */
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -65,6 +73,10 @@ import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
+/**
+ * PlayerScreen: interfaz principal de reproducción. Mantiene el estado local del arrastre del
+ * slider y delega todas las acciones al AudioPlayerManager.
+ */
 fun PlayerScreen(
     currentSong: Song?,
     isPlaying: Boolean,
@@ -418,6 +430,7 @@ fun PlayerScreen(
     }
 }
 
+// Formatea milisegundos como m:ss para los tiempos del reproductor.
 private fun formatMs(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0)
     val minutes = totalSeconds / 60

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ARCHIVO: themes.xml - Tema XML base de la actividad (sin ActionBar). La apariencia real la da Compose. -->
 <resources>
 
+    <!-- Tema del sistema aplicado antes de que Compose dibuje MyApplicationTheme. -->
     <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar" />
 </resources>

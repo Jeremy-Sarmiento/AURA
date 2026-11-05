@@ -1,5 +1,12 @@
 package com.example.aura.ui.components
 
+/**
+ * ARCHIVO: MiniPlayerBar.kt
+ * FUNCIÓN: Barra flotante sobre la navegación inferior con la pista actual, play/pausa, siguiente
+ *          y barra de progreso. Al tocarla se abre el reproductor completo.
+ * NAVEGACIÓN: AuraApp (bottomBar) -> MiniPlayerBar -> AudioPlayerManager / AuraScreen.PLAYER.
+ */
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -46,6 +53,9 @@ import com.example.ui.theme.AuraPrimaryPurple
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
+/**
+ * MiniPlayerBar: visible solo si hay canción activa; muestra metadatos y controles básicos.
+ */
 fun MiniPlayerBar(
     currentSong: Song?,
     isPlaying: Boolean,

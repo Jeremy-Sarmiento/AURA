@@ -1,5 +1,13 @@
 package com.example.aura.ui
 
+/**
+ * ARCHIVO: AuraViewModel.kt
+ * FUNCIÓN: Cerebro de la app. Mantiene el estado (pantalla, canciones, listas, búsqueda, archivos,
+ *          ajustes), conecta Room + LocalFileManager + AudioPlayerManager y expone StateFlows y
+ *          acciones a la UI Compose.
+ * NAVEGACIÓN: MainActivity/AuraApp -> AuraViewModel -> data/local (Room), data/storage, player.
+ */
+
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
@@ -25,6 +33,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+/**
+ * AuraScreen: pantallas navegables de la app. AuraApp hace el "when" sobre este enum.
+ */
 enum class AuraScreen {
     WELCOME,
     HOME,
@@ -38,6 +49,10 @@ enum class AuraScreen {
     SETTINGS
 }
 
+/**
+ * AuraViewModel: estado central de AURA y única fuente de verdad para la UI.
+ * Inicializa la base de datos, el escáner de archivos y el reproductor singleton.
+ */
 class AuraViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AuraDatabase.getInstance(application)
@@ -129,6 +144,10 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         loadDirectory(null)
     }
 
+    /**
+     * loadInitialData: crea las listas del sistema (Favoritas y Lossless) y abre dos flujos
+     * reactivos: canciones de la BD y listas con sus ids de canciones.
+     */
     private fun loadInitialData() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -156,7 +175,11 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            // Load songs from DB
+            try {
+                songDao.deleteShortAudioAndVoiceNotes(60000L)
+            } catch (_: Exception) {}
+
+            // Cargar canciones de la BD
             songDao.getAllSongs().collect { entities ->
                 _songs.value = entities.map { it.toDomain() }
             }
@@ -185,6 +208,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Navigation
+    // Cambia de pantalla y guarda la anterior en la pila para poder volver.
     fun navigateTo(screen: AuraScreen) {
         if (_currentScreen.value != screen) {
             screenStack.add(_currentScreen.value)
@@ -192,6 +216,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Retrocede en la pila; si está vacía vuelve a HOME. Devuelve false si ya no puede volver.
     fun navigateBack(): Boolean {
         return if (screenStack.isNotEmpty()) {
             _currentScreen.value = screenStack.removeAt(screenStack.lastIndex)
@@ -204,11 +229,13 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Abre la pantalla de detalle de una lista de reproducción.
     fun openPlaylist(playlist: Playlist) {
         _selectedPlaylist.value = playlist
         navigateTo(AuraScreen.PLAYLIST_DETAIL)
     }
 
+    // Construye un Artist a partir de las canciones locales y abre su detalle.
     fun openArtist(artistName: String) {
         val artistSongs = _songs.value.filter { it.artist.equals(artistName, ignoreCase = true) }
         val artist = Artist(
@@ -223,21 +250,25 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         navigateTo(AuraScreen.ARTIST_DETAIL)
     }
 
+    // Alterna el estado "siguiendo" del artista seleccionado (solo en memoria).
     fun toggleFollowArtist() {
         val current = _selectedArtist.value ?: return
         _selectedArtist.value = current.copy(isFollowing = !current.isFollowing)
     }
 
     // Search
+    // Actualiza el texto de búsqueda; searchResults se recalcula automáticamente.
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
     }
 
+    // Selecciona/deselecciona un género para filtrar los resultados.
     fun selectGenre(genre: String?) {
         _selectedGenre.value = if (_selectedGenre.value == genre) null else genre
     }
 
     // Song favorite toggle (Namida style: direct song property flag)
+    // Marca/desmarca una canción como favorita y actualiza BD y memoria.
     fun toggleFavorite(songId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val song = _songs.value.find { it.id == songId } ?: return@launch
@@ -252,6 +283,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Playlists creation & management
+    // Crea una lista personalizada con nombre, descripción y color.
     fun createPlaylist(name: String, description: String = "", colorHex: Long = 0xFF9155FD) {
         viewModelScope.launch(Dispatchers.IO) {
             val id = "playlist_${UUID.randomUUID()}"
@@ -267,6 +299,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Elimina una lista y sus relaciones; si era la abierta, vuelve atrás.
     fun deletePlaylist(playlistId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             playlistDao.deletePlaylist(playlistId)
@@ -278,6 +311,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Añade una canción a una lista.
     fun addSongToPlaylist(playlistId: String, songId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             playlistDao.insertPlaylistSong(
@@ -291,6 +325,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Quita una canción de una lista.
     fun removeSongFromPlaylist(playlistId: String, songId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             playlistDao.removeSongFromPlaylist(playlistId, songId)
@@ -299,17 +334,19 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Local Storage Scanner & File Manager
+    // Escanea MediaStore y guarda en Room todas las pistas encontradas.
     fun scanDeviceStorage() {
         viewModelScope.launch(Dispatchers.IO) {
             _isScanning.value = true
             _statusMessage.value = "Escaneando almacenamiento local..."
             try {
+                songDao.deleteShortAudioAndVoiceNotes(60000L)
                 val scanned = fileManager.scanMediaStore()
                 if (scanned.isNotEmpty()) {
                     songDao.insertSongs(scanned.map { SongEntity.fromDomain(it) })
-                    _statusMessage.value = "Se encontraron ${scanned.size} archivos de música"
+                    _statusMessage.value = "Se encontraron ${scanned.size} canciones (mayores a 1 min)"
                 } else {
-                    _statusMessage.value = "No se encontraron más pistas en MediaStore"
+                    _statusMessage.value = "No se encontraron más canciones en MediaStore"
                 }
             } catch (e: Exception) {
                 _statusMessage.value = "Error al escanear: ${e.message}"
@@ -319,6 +356,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Importa una pista desde una URI concreta (intent, selector de archivos) y la reproduce.
     fun importSongFromUri(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             _isScanning.value = true
@@ -340,6 +378,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Importa todos los audios de una carpeta elegida con SAF.
     fun importFolderFromTreeUri(treeUri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             _isScanning.value = true
@@ -360,6 +399,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Carga el contenido de una carpeta para el explorador de archivos.
     fun loadDirectory(path: String?) {
         viewModelScope.launch(Dispatchers.IO) {
             _currentDirectoryPath.value = path
@@ -368,19 +408,23 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Limpia el mensaje de estado tras mostrarlo en el Snackbar.
     fun clearStatusMessage() {
         _statusMessage.value = null
     }
 
+    // Activa/desactiva el modo Hi-Fi Lossless (preferencia de la pantalla de ajustes).
     fun toggleHiFiLossless(enabled: Boolean) {
         _hifiLosslessEnabled.value = enabled
     }
 
+    // Activa/desactiva las notificaciones de reproducción (preferencia).
     fun toggleNotifications(enabled: Boolean) {
         _notificationsEnabled.value = enabled
     }
 
     // Lyrics parser
+    // Convierte texto LRC ([mm:ss.xx]texto) en una lista de LyricLine sincronizadas.
     private fun parseLrcLyrics(lrc: String): List<LyricLine> {
         if (lrc.isBlank()) {
             return listOf(
@@ -422,6 +466,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Al destruirse el ViewModel, detiene y libera el reproductor y el servicio.
     override fun onCleared() {
         super.onCleared()
         playerManager.stop()

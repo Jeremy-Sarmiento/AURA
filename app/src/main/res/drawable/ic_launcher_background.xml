@@ -1,3 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  ARCHIVO: ic_launcher_background.xml
+  FUNCIÓN: Fondo del icono adaptativo: color oscuro base del launcher.
+  NAVEGACIÓN: Referenciado por mipmap-anydpi-v26/ic_launcher.xml y ic_launcher_round.xml.
+-->
 <color xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="#121324" />

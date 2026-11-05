@@ -1,9 +1,20 @@
 package com.example.aura.data.local
 
+/**
+ * ARCHIVO: Entities.kt
+ * FUNCIÓN: Entidades de Room que representan la base de datos local (canciones, listas y su relación).
+ *          Incluye conversores manuales entre la entidad y el modelo de dominio Song.
+ * NAVEGACIÓN: Daos.kt -> AuraDatabase.kt -> AuraViewModel (lee y convierte a modelos de /model).
+ */
+
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.aura.model.Song
 
+/**
+ * SongEntity: tabla "songs". Contiene todos los metadatos de una pista persistida.
+ * toDomain()/fromDomain() traducen entre Room y el modelo usado por la UI.
+ */
 @Entity(tableName = "songs")
 data class SongEntity(
     @PrimaryKey val id: String,
@@ -23,6 +34,7 @@ data class SongEntity(
     val coverColorHex: Long,
     val dateAdded: Long
 ) {
+    // Convierte la fila de Room en el modelo de dominio Song.
     fun toDomain(): Song = Song(
         id = id,
         title = title,
@@ -43,6 +55,7 @@ data class SongEntity(
     )
 
     companion object {
+        // Convierte un Song de dominio en su entidad persistible.
         fun fromDomain(song: Song): SongEntity = SongEntity(
             id = song.id,
             title = song.title,
@@ -64,6 +77,9 @@ data class SongEntity(
     }
 }
 
+/**
+ * PlaylistEntity: tabla "playlists". Metadatos de cada lista de reproducción.
+ */
 @Entity(tableName = "playlists")
 data class PlaylistEntity(
     @PrimaryKey val id: String,
@@ -73,6 +89,10 @@ data class PlaylistEntity(
     val createdAt: Long
 )
 
+/**
+ * PlaylistSongEntity: tabla intermedia "playlist_songs" (relación N:M lista-canción).
+ * sortOrder conserva el orden manual de las pistas dentro de la lista.
+ */
 @Entity(
     tableName = "playlist_songs",
     primaryKeys = ["playlistId", "songId"]

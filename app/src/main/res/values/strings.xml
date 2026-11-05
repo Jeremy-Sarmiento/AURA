@@ -1,3 +1,9 @@
+<!--
+  ARCHIVO: strings.xml
+  FUNCIÓN: Recursos de texto globales (nombre visible de la app).
+  NAVEGACIÓN: AndroidManifest.xml y código Compose lo leen mediante R.string / @string.
+-->
 <resources>
+    <!-- Nombre visible de la app (launcher y ajustes del sistema). -->
     <string name="app_name">AURA</string>
 </resources>

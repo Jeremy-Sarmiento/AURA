@@ -1,5 +1,11 @@
 package com.example.aura.ui.screens
 
+/**
+ * ARCHIVO: WelcomeScreen.kt
+ * FUNCIÓN: Pantalla de bienvenida con el logo de AURA y los botones Iniciar / Registrarse.
+ * NAVEGACIÓN: AuraApp (AuraScreen.WELCOME) -> WelcomeScreen -> navega a HOME.
+ */
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +45,9 @@ import com.example.ui.theme.AuraPrimaryPurpleLight
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
+/**
+ * WelcomeScreen: portada inicial; ambos botones conducen actualmente a la pantalla HOME.
+ */
 fun WelcomeScreen(
     onStartClick: () -> Unit,
     onRegisterClick: () -> Unit
