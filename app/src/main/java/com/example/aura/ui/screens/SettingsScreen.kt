@@ -115,8 +115,8 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(18.dp))
 
         SettingItemRow(
-            title = "Música local",
-            subtitle = "Gestor de archivos de música y carpetas",
+            title = "Carpetas de música",
+            subtitle = "Elige las rutas que AURA puede leer y buscar archivos nuevos",
             icon = Icons.Default.Download,
             onItemClick = onOpenFileExplorer
         )
@@ -154,7 +154,7 @@ fun SettingsScreen(
                             color = Color.White
                         )
                         Text(
-                            text = "• Formatos soportados: FLAC (hasta 24-bit/192kHz), WAV (PCM), ALAC, AIFF, MP3, AAC, OGG.\n• Gestor de archivos integrado para explorar y escanear la música de tu teléfono sin interrupciones.\n• Listas de reproducción personalizadas y letras sincronizadas.",
+                            text = "• Formatos soportados: FLAC (hasta 24-bit/192kHz), WAV (PCM), ALAC, AIFF, MP3, AAC, OGG.\n• AURA solo lee las carpetas que autorizas. Las rutas se guardan y se conservan al actualizar la app.\n• Cada vez que abres una carpeta, AURA busca archivos nuevos y quita de la biblioteca los que ya no existen.\n• Listas de reproducción personalizadas y letras sincronizadas.",
                             style = MaterialTheme.typography.bodySmall,
                             color = AuraTextSecondary
                         )

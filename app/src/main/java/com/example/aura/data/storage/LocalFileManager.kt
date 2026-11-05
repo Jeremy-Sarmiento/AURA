@@ -2,134 +2,152 @@ package com.example.aura.data.storage
 
 /**
  * ARCHIVO: LocalFileManager.kt
- * FUNCIÓN: Acceso al almacenamiento local: escaneo de MediaStore, lectura de metadatos de URIs (SAF),
- *          importación de carpetas y exploración de directorios física. Devuelve modelos Song.
+ * FUNCIÓN: Acceso al almacenamiento local mediante SAF: escaneo recursivo de las carpetas que el
+ *          usuario autoriza, lectura de metadatos de URIs y gestión de carpetas de música.
  * NAVEGACIÓN: AuraViewModel -> LocalFileManager; la UI abre el flujo desde FileManagerSheet.
+ *
+ * La exploración de árbol está basada en `SafUtils.listTree` de Namida
+ * (https://github.com/namidaco/namida): cola BFS, sin recursión y sin repetir directorios.
  */
 
-import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.provider.DocumentsContract
-import android.provider.MediaStore
 import android.util.Log
 import com.example.aura.model.Song
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.File
 
-// Sin permiso persistente, la pista importada deja de sonar tras reiniciar la app.
+// Sin permiso persistente, la carpeta importada deja de leerse tras reiniciar la app.
 fun Context.takePersistableReadPermission(uri: Uri) {
     try {
         contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
     } catch (_: SecurityException) {
-        // Algunos proveedores no conceden permisos persistentes; la pista funciona solo en esta sesión.
+        // Algunos proveedores no conceden permisos persistentes; la carpeta funciona solo en esta sesión.
     }
 }
+
+// Libera el permiso persistente cuando el usuario quita una carpeta de la biblioteca.
+fun Context.releasePersistableReadPermission(uri: Uri) {
+    try {
+        contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    } catch (_: Exception) {
+        // El proveedor pudo revocar el permiso antes; no hay nada más que liberar.
+    }
+}
+
+/**
+ * MusicFolder: carpeta autorizada por el usuario. El URI es un tree URI SAF y se conserva en
+ * SharedPreferences para que la selección sobreviva a las actualizaciones de la app.
+ */
+data class MusicFolder(
+    val uri: Uri,
+    val displayName: String,
+    val pathLabel: String,
+    val hasReadPermission: Boolean = true
+) {
+    val uriString: String get() = uri.toString()
+
+    // Prefijo con separador para no confundir "Música" con "Música2".
+    val songUriPrefix: String get() = "$uriString/"
+}
+
+/**
+ * FolderScanResult: canciones leídas y todos los URIs de audio encontrados. Los URIs permiten
+ * distinguir un archivo borrado de uno que existe pero cuyos metadatos fallaron temporalmente.
+ */
+data class FolderScanResult(
+    val songs: List<Song>,
+    val discoveredUriStrings: Set<String>
+)
 
 class LocalFileManager(private val context: Context) {
 
     companion object {
         // Duración mínima de 1 minuto (60,000 ms) para ignorar notas de voz, tonos y sonidos cortos
         const val MIN_SONG_DURATION_MS = 60_000L
+
+        private val AUDIO_EXTENSIONS = setOf(
+            "flac", "wav", "alac", "aiff", "aif", "mp3", "m4a", "m4b", "aac", "ogg", "opus", "wma", "ape"
+        )
     }
 
     /**
-     * scanMediaStore: recorre MediaStore.Audio y devuelve las pistas de música del dispositivo
-     * que duran más de 1 minuto y descarta audios de WhatsApp, notas de voz (PTT), tonos de llamada
-     * y sonidos del sistema.
+     * describeFolder: obtiene el nombre visible y la ruta legible de una carpeta SAF.
      */
-    suspend fun scanMediaStore(): List<Song> = withContext(Dispatchers.IO) {
-        val songList = mutableListOf<Song>()
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.MIME_TYPE,
-            MediaStore.Audio.Media.DATE_ADDED
+    fun describeFolder(treeUri: Uri): MusicFolder {
+        return MusicFolder(
+            uri = treeUri,
+            displayName = getFolderDisplayName(treeUri),
+            pathLabel = getFolderPathLabel(treeUri),
+            hasReadPermission = hasPersistedReadPermission(treeUri)
         )
+    }
 
-        // Filtra en MediaStore por categoría música y duración >= 1 minuto (60,000 ms)
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= $MIN_SONG_DURATION_MS"
-        val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
-
-        try {
-            val cursor = context.contentResolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                projection,
-                selection,
-                null,
-                sortOrder
-            )
-
-            cursor?.use { c ->
-                val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val titleCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-                val albumCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-                val durCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                val dataCol = c.getColumnIndex(MediaStore.Audio.Media.DATA)
-                val mimeCol = c.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
-
-                while (c.moveToNext()) {
-                    val id = c.getLong(idCol)
-                    val title = c.getString(titleCol) ?: "Pista $id"
-                    val artist = c.getString(artistCol).takeIf { it != "<unknown>" } ?: "Artista Desconocido"
-                    val album = c.getString(albumCol) ?: "Álbum"
-                    val duration = c.getLong(durCol)
-                    val path = if (dataCol >= 0) c.getString(dataCol) else null
-                    val mime = if (mimeCol >= 0) c.getString(mimeCol) ?: "" else ""
-
-                    val pathLower = path?.lowercase() ?: ""
-                    val titleLower = title.lowercase()
-
-                    // Filtrar estrictamente notas de voz de WhatsApp, audios PTT/AUD, tonos y notificaciones
-                    val isWhatsApp = pathLower.contains("whatsapp") || titleLower.startsWith("ptt-") || titleLower.startsWith("aud-")
-                    val isRingtoneOrNotif = pathLower.contains("ringtones") || pathLower.contains("notifications") || pathLower.contains("alarms")
-
-                    if (duration >= MIN_SONG_DURATION_MS && !isWhatsApp && !isRingtoneOrNotif) {
-                        val contentUri = ContentUris.withAppendedId(
-                            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                            id
-                        )
-
-                        val format = detectFormat(path, mime)
-                        val isLossless = isFormatLossless(format)
-                        val specs = extractMetadataForUri(contentUri, isLossless)
-
-                        songList.add(
-                            Song(
-                                id = "media_$id",
-                                title = title,
-                                artist = artist,
-                                album = album,
-                                durationMs = duration,
-                                uriString = contentUri.toString(),
-                                filePath = path,
-                                format = format,
-                                sampleRate = specs.sampleRate,
-                                bitDepth = specs.bitDepth,
-                                bitrateKbps = specs.bitrateKbps,
-                                isLossless = isLossless,
-                                lyrics = readSiblingLyrics(path),
-                                coverColorHex = getPaletteColor(title.hashCode())
-                            )
-                        )
-                    }
-                }
+    // Comprueba que la app conserve el permiso de lectura persistente para la carpeta.
+    fun hasPersistedReadPermission(treeUri: Uri): Boolean {
+        return try {
+            context.contentResolver.persistedUriPermissions.any { permission ->
+                permission.isReadPermission && permission.uri == treeUri
             }
-        } catch (e: Exception) {
-            Log.e("LocalFileManager", "Error scanning MediaStore", e)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // Nombre visible de la carpeta raíz del árbol SAF (por ejemplo "Música").
+    fun getFolderDisplayName(treeUri: Uri): String {
+        val fallback = try {
+            DocumentsContract.getTreeDocumentId(treeUri)
+                .substringAfterLast(':')
+                .substringAfterLast('/')
+                .takeIf { it.isNotBlank() }
+                ?: "Carpeta de música"
+        } catch (_: Exception) {
+            "Carpeta de música"
         }
 
-        songList
+        return try {
+            val treeDocId = DocumentsContract.getTreeDocumentId(treeUri)
+            val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocId)
+            context.contentResolver.query(
+                documentUri,
+                arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }?.takeIf { it.isNotBlank() } ?: fallback
+        } catch (_: Exception) {
+            fallback
+        }
+    }
+
+    // Ruta legible para mostrar debajo del nombre de la carpeta.
+    fun getFolderPathLabel(treeUri: Uri): String {
+        return try {
+            val documentId = DocumentsContract.getTreeDocumentId(treeUri)
+            val volumeId = documentId.substringBefore(':', missingDelimiterValue = documentId)
+            val relativePath = documentId.substringAfter(':', missingDelimiterValue = "").trim('/')
+            val volumeLabel = if (volumeId.equals("primary", ignoreCase = true)) {
+                "Almacenamiento interno"
+            } else {
+                volumeId
+            }
+            listOf(volumeLabel, relativePath)
+                .filter { it.isNotBlank() }
+                .joinToString("/")
+        } catch (_: Exception) {
+            treeUri.toString()
+        }
     }
 
     /**
@@ -165,9 +183,13 @@ class LocalFileManager(private val context: Context) {
                 fileName.endsWith(".flac", ignoreCase = true) -> "FLAC"
                 fileName.endsWith(".wav", ignoreCase = true) -> "WAV"
                 fileName.endsWith(".alac", ignoreCase = true) -> "ALAC"
-                fileName.endsWith(".m4a", ignoreCase = true) -> "M4A"
+                fileName.endsWith(".aiff", ignoreCase = true) || fileName.endsWith(".aif", ignoreCase = true) -> "AIFF"
+                fileName.endsWith(".m4a", ignoreCase = true) || fileName.endsWith(".m4b", ignoreCase = true) -> "M4A"
                 fileName.endsWith(".ogg", ignoreCase = true) -> "OGG"
+                fileName.endsWith(".opus", ignoreCase = true) -> "OPUS"
                 fileName.endsWith(".aac", ignoreCase = true) -> "AAC"
+                fileName.endsWith(".wma", ignoreCase = true) -> "WMA"
+                fileName.endsWith(".ape", ignoreCase = true) -> "APE"
                 else -> "MP3"
             }
             val isLossless = isFormatLossless(format)
@@ -198,22 +220,6 @@ class LocalFileManager(private val context: Context) {
             try {
                 retriever.release()
             } catch (_: Exception) {}
-        }
-    }
-
-    private fun extractMetadataForUri(uri: Uri, isLossless: Boolean): AudioSpecs {
-        val retriever = MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(context, uri)
-            extractAudioSpecs(retriever, isLossless)
-        } catch (_: Exception) {
-            AudioSpecs(
-                sampleRate = 44100,
-                bitDepth = 16,
-                bitrateKbps = if (isLossless) 1411 else 320
-            )
-        } finally {
-            try { retriever.release() } catch (_: Exception) {}
         }
     }
 
@@ -250,82 +256,94 @@ class LocalFileManager(private val context: Context) {
     )
 
     /**
-     * scanFolderFromTree: recorre una carpeta elegida con SAF y devuelve solo canciones
-     * con duración mayor o igual a 1 minuto.
+     * scanFolderFromTree: porta `listTree` de Namida. Recorre todo el árbol SAF con una cola BFS,
+     * incluidas las subcarpetas, y devuelve solo pistas de más de 1 minuto.
      */
-    suspend fun scanFolderFromTree(treeUri: Uri): List<Song> = withContext(Dispatchers.IO) {
-        val results = mutableListOf<Song>()
-        try {
-            val treeDocId = DocumentsContract.getTreeDocumentId(treeUri)
-            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, treeDocId)
-            val projection = arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE
-            )
+    suspend fun scanFolderFromTree(treeUri: Uri): FolderScanResult = withContext(Dispatchers.IO) {
+        val audioUris = listAudioDocumentUris(treeUri)
+        val songs = mutableListOf<Song>()
 
-            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-                val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-                val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
-
-                while (cursor.moveToNext()) {
-                    val docId = cursor.getString(idCol)
-                    val name = cursor.getString(nameCol) ?: ""
-                    val mime = cursor.getString(mimeCol) ?: ""
-                    val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
-
-                    val isAudio = mime.startsWith("audio/") ||
-                            name.endsWith(".flac", ignoreCase = true) ||
-                            name.endsWith(".wav", ignoreCase = true) ||
-                            name.endsWith(".alac", ignoreCase = true) ||
-                            name.endsWith(".mp3", ignoreCase = true) ||
-                            name.endsWith(".m4a", ignoreCase = true) ||
-                            name.endsWith(".ogg", ignoreCase = true)
-
-                    if (isAudio) {
-                        parseSongFromUri(docUri)?.let { song ->
-                            if (song.durationMs >= MIN_SONG_DURATION_MS) {
-                                results.add(song)
-                            }
-                        }
-                    }
-                }
+        // Namida procesa los metadatos en lotes; aquí se hace de 4 en 4 para no saturar el proveedor.
+        audioUris.chunked(4).forEach { batch ->
+            val parsed = coroutineScope {
+                batch.map { uri -> async { parseSongFromUri(uri) } }.awaitAll()
             }
-        } catch (e: Exception) {
-            Log.e("LocalFileManager", "Error scanning folder tree", e)
+            songs += parsed.filterNotNull()
         }
-        results
+
+        FolderScanResult(
+            songs = songs,
+            discoveredUriStrings = audioUris.mapTo(mutableSetOf()) { it.toString() }
+        )
     }
 
     /**
-     * listDirectory: lista carpetas/archivos de una ruta física para el explorador integrado.
+     * listAudioDocumentUris: recorre el árbol sin recursión para evitar desbordes de pila.
+     * Si la carpeta raíz falla (por ejemplo, permiso revocado), lanza la excepción para que el
+     * ViewModel no interprete el fallo como "carpeta vacía" y borre canciones válidas.
      */
-    fun listDirectory(path: String?): List<FileItem> {
-        val dir = if (path.isNullOrEmpty()) {
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-                .takeIf { it.exists() }
-                ?: Environment.getExternalStorageDirectory()
-        } else {
-            File(path)
+    private fun listAudioDocumentUris(treeUri: Uri): List<Uri> {
+        val audioUris = mutableListOf<Uri>()
+        val pending = ArrayDeque<Pair<String, String>>()
+        val visited = mutableSetOf<String>()
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE
+        )
+
+        pending.add(DocumentsContract.getTreeDocumentId(treeUri) to "")
+        var isRoot = true
+
+        while (pending.isNotEmpty()) {
+            val (parentId, parentPath) = pending.removeFirst()
+            if (!visited.add(parentId)) continue
+
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
+            val cursor = try {
+                context.contentResolver.query(childrenUri, projection, null, null, null)
+            } catch (e: Exception) {
+                if (isRoot) throw e
+                Log.w("LocalFileManager", "No se pudo leer la subcarpeta $parentPath", e)
+                null
+            }
+            if (isRoot && cursor == null) {
+                isRoot = false
+                throw IllegalStateException("No se pudo abrir la carpeta: $treeUri")
+            }
+            isRoot = false
+
+            cursor?.use { c ->
+                val idCol = c.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameCol = c.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val mimeCol = c.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+
+                while (c.moveToNext()) {
+                    val docId = c.getString(idCol) ?: continue
+                    val name = c.getString(nameCol) ?: ""
+                    val mime = c.getString(mimeCol) ?: ""
+
+                    if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                        val childPath = if (parentPath.isEmpty()) name else "$parentPath/$name"
+                        pending.add(docId to childPath)
+                        continue
+                    }
+
+                    if (isAudioDocument(name, mime)) {
+                        audioUris.add(DocumentsContract.buildDocumentUriUsingTree(treeUri, docId))
+                    }
+                }
+            }
         }
 
-        if (!dir.exists() || !dir.isDirectory) return emptyList()
+        return audioUris
+    }
 
-        val files = dir.listFiles() ?: return emptyList()
-        return files.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
-            .map { file ->
-                val isLossless = file.extension.lowercase() in listOf("flac", "wav", "alac", "aiff")
-                val isAudio = isLossless || file.extension.lowercase() in listOf("mp3", "m4a", "ogg", "aac")
-                FileItem(
-                    name = file.name,
-                    absolutePath = file.absolutePath,
-                    isDirectory = file.isDirectory,
-                    isAudio = isAudio,
-                    isLossless = isLossless,
-                    sizeBytes = file.length()
-                )
-            }
+    // Acepta tanto el MIME del proveedor como la extensión, igual que hace Namida con su lista.
+    private fun isAudioDocument(name: String, mime: String): Boolean {
+        if (mime.startsWith("audio/", ignoreCase = true)) return true
+        val extension = name.substringAfterLast('.', "").lowercase()
+        return extension in AUDIO_EXTENSIONS
     }
 
     private fun readSiblingLyrics(audioPath: String?): String {
@@ -344,21 +362,8 @@ class LocalFileManager(private val context: Context) {
         }
     }
 
-    private fun detectFormat(path: String?, mime: String): String {
-        val ext = path?.substringAfterLast('.', "")?.uppercase() ?: ""
-        return when {
-            ext in listOf("FLAC", "WAV", "ALAC", "AIFF", "MP3", "AAC", "OGG", "M4A") -> ext
-            mime.contains("flac") -> "FLAC"
-            mime.contains("wav") -> "WAV"
-            mime.contains("alac") -> "ALAC"
-            mime.contains("mp4") || mime.contains("m4a") -> "M4A"
-            mime.contains("ogg") -> "OGG"
-            else -> "MP3"
-        }
-    }
-
     private fun isFormatLossless(format: String): Boolean {
-        return format.uppercase() in listOf("FLAC", "WAV", "ALAC", "AIFF")
+        return format.uppercase() in listOf("FLAC", "WAV", "ALAC", "AIFF", "APE")
     }
 
     private fun getPaletteColor(seed: Int): Long {
@@ -369,15 +374,3 @@ class LocalFileManager(private val context: Context) {
         return palette[index]
     }
 }
-
-/**
- * FileItem: elemento mostrado por el explorador de archivos (carpeta, audio o archivo).
- */
-data class FileItem(
-    val name: String,
-    val absolutePath: String,
-    val isDirectory: Boolean,
-    val isAudio: Boolean,
-    val isLossless: Boolean,
-    val sizeBytes: Long
-)

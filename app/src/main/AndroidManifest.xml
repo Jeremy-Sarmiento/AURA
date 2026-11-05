@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   ARCHIVO: AndroidManifest.xml
-  FUNCIÓN: Declara permisos (audio, notificaciones, foreground service), la actividad principal
+  FUNCIÓN: Declara permisos (notificaciones y foreground service), la actividad principal
            (lanza la app y abre archivos de audio) y el servicio de reproducción en primer plano.
   NAVEGACIÓN: MainActivity -> AuraApp; MusicPlaybackService -> notificación multimedia.
+
+  La lectura de música usa Storage Access Framework (permisos por carpeta), por eso no se
+  declaran READ_MEDIA_AUDIO ni READ_EXTERNAL_STORAGE.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permisos: lectura de audio (API 33+ y anterior), notificaciones y servicio en primer plano. -->
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- Permisos: notificaciones y servicio en primer plano. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

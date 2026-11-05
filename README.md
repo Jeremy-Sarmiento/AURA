@@ -5,7 +5,7 @@ AURA es un reproductor de música de alta fidelidad (Hi-Fi) y gestión de archiv
 ## Características Principales
 
 - **Audio de Alta Fidelidad (Hi-Fi):** Soporte para FLAC, WAV, ALAC y pistas sin pérdida de hasta 24-bit/192kHz.
-- **Gestión de Archivos Locales:** Escaneo automático de almacenamiento del dispositivo y selección de archivos locales.
+- **Gestión de Archivos Locales:** Selección de carpetas mediante SAF, escaneo recursivo de archivos nuevos y rutas persistentes entre actualizaciones.
 - **Letras Sincronizadas:** Visualización de letras con formato LRC.
 - **Listas de Reproducción y Favoritos:** Organiza tu música favorita y crea listas personalizadas.
 - **Interfaz Moderna Material 3:** Diseño elegante y oscuro adaptado para experiencias musicales inmersivas.

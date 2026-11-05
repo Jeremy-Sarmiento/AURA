@@ -96,8 +96,7 @@ private fun screenTitle(screen: AuraScreen): String = when (screen) {
  * diálogos y hace la transición animada entre pantallas.
  */
 fun AuraApp(
-    viewModel: AuraViewModel,
-    onRequestAudioPermission: () -> Unit = {}
+    viewModel: AuraViewModel
 ) {
     // Estado de navegación, biblioteca, búsqueda, archivos y ajustes (StateFlow -> Compose).
     val currentScreen by viewModel.currentScreen.collectAsState()
@@ -111,8 +110,7 @@ fun AuraApp(
     val parsedLyrics by viewModel.parsedLyrics.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
-    val currentDirPath by viewModel.currentDirectoryPath.collectAsState()
-    val directoryFiles by viewModel.directoryFiles.collectAsState()
+    val musicFolders by viewModel.musicFolders.collectAsState()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
 
     // Player state
@@ -141,6 +139,13 @@ fun AuraApp(
         statusMessage?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearStatusMessage()
+        }
+    }
+
+    // Al abrir el gestor se buscan archivos nuevos en las carpetas ya autorizadas.
+    LaunchedEffect(showFileManagerSheet) {
+        if (showFileManagerSheet) {
+            viewModel.refreshMusicFolders()
         }
     }
 
@@ -188,16 +193,13 @@ fun AuraApp(
             sheetState = sheetState,
             isScanning = isScanning,
             statusMessage = statusMessage,
-            currentPath = currentDirPath,
-            files = directoryFiles,
+            musicFolders = musicFolders,
             onDismiss = { showFileManagerSheet = false },
-            onScanMediaStore = { viewModel.scanDeviceStorage() },
-            onImportUri = { uri -> viewModel.importSongFromUri(uri) },
-            onImportFolder = { treeUri -> viewModel.importFolderFromTreeUri(treeUri) },
-            onNavigateDir = { path -> viewModel.loadDirectory(path) },
-            onPlayFileItem = { fileItem ->
-                viewModel.importSongFromUri(android.net.Uri.fromFile(java.io.File(fileItem.absolutePath)))
-            }
+            onAddMusicFolder = { treeUri -> viewModel.addMusicFolder(treeUri) },
+            onRemoveMusicFolder = { folder -> viewModel.removeMusicFolder(folder) },
+            onRescanMusicFolder = { folder -> viewModel.rescanMusicFolder(folder) },
+            onRescanMusicFolders = { viewModel.refreshMusicFolders() },
+            onImportUri = { uri -> viewModel.importSongFromUri(uri) }
         )
     }
 
@@ -285,10 +287,10 @@ fun AuraApp(
                         HomeScreen(
                             songs = songs,
                             playlists = playlists,
+                            musicFolderCount = musicFolders.size,
                             onSongClick = { song -> playerManager.playSong(song, songs) },
                             onPlaylistClick = { pl -> viewModel.openPlaylist(pl) },
-                            onOpenFileExplorer = { showFileManagerSheet = true },
-                            onRequestPermission = onRequestAudioPermission
+                            onOpenFileExplorer = { showFileManagerSheet = true }
                         )
                     }
 

@@ -16,8 +16,10 @@ import com.example.aura.data.local.AuraDatabase
 import com.example.aura.data.local.PlaylistEntity
 import com.example.aura.data.local.PlaylistSongEntity
 import com.example.aura.data.local.SongEntity
-import com.example.aura.data.storage.FileItem
 import com.example.aura.data.storage.LocalFileManager
+import com.example.aura.data.storage.MusicFolder
+import com.example.aura.data.storage.releasePersistableReadPermission
+import com.example.aura.data.storage.takePersistableReadPermission
 import com.example.aura.model.Artist
 import com.example.aura.model.LyricLine
 import com.example.aura.model.Playlist
@@ -31,7 +33,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.UUID
 
 /**
@@ -54,6 +60,11 @@ enum class AuraScreen {
  * Inicializa la base de datos, el escáner de archivos y el reproductor singleton.
  */
 class AuraViewModel(application: Application) : AndroidViewModel(application) {
+
+    companion object {
+        // La selección vive en SharedPreferences: se conserva al actualizar la app.
+        private const val MUSIC_FOLDERS_PREF_KEY = "music_folders_json"
+    }
 
     private val db = AuraDatabase.getInstance(application)
     private val songDao = db.songDao()
@@ -91,12 +102,12 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedGenre = MutableStateFlow<String?>(null)
     val selectedGenre: StateFlow<String?> = _selectedGenre.asStateFlow()
 
-    // File manager / explorer state
-    private val _currentDirectoryPath = MutableStateFlow<String?>(null)
-    val currentDirectoryPath: StateFlow<String?> = _currentDirectoryPath.asStateFlow()
+    // Carpetas de música autorizadas por el usuario (SAF).
+    private val _musicFolders = MutableStateFlow<List<MusicFolder>>(emptyList())
+    val musicFolders: StateFlow<List<MusicFolder>> = _musicFolders.asStateFlow()
 
-    private val _directoryFiles = MutableStateFlow<List<FileItem>>(emptyList())
-    val directoryFiles: StateFlow<List<FileItem>> = _directoryFiles.asStateFlow()
+    // Evita que dos escaneos (inicio, abrir gestor, tocar carpeta) se pisen.
+    private val scanMutex = Mutex()
 
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
@@ -142,7 +153,7 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     init {
         com.example.aura.service.MusicPlaybackService.showOnLockscreen = _notificationsEnabled.value
         loadInitialData()
-        loadDirectory(null)
+        restoreMusicFolders()
     }
 
     /**
@@ -344,26 +355,200 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Local Storage Scanner & File Manager
-    // Escanea MediaStore y guarda en Room todas las pistas encontradas.
-    fun scanDeviceStorage() {
+    // Carga las carpetas guardadas y las re-escanea al iniciar la app.
+    private fun restoreMusicFolders() {
         viewModelScope.launch(Dispatchers.IO) {
-            _isScanning.value = true
-            _statusMessage.value = "Escaneando almacenamiento local..."
+            val storedFolders = loadStoredMusicFolders()
+            _musicFolders.value = storedFolders
+
+            // La detección global anterior ya no forma parte de la biblioteca.
             try {
-                songDao.deleteShortAudioAndVoiceNotes(60000L)
-                val scanned = fileManager.scanMediaStore()
-                if (scanned.isNotEmpty()) {
-                    songDao.insertSongs(scanned.map { SongEntity.fromDomain(it) })
-                    _statusMessage.value = "Se encontraron ${scanned.size} canciones (mayores a 1 min)"
-                } else {
-                    _statusMessage.value = "No se encontraron más canciones en MediaStore"
+                songDao.deleteMediaStoreSongs()
+            } catch (_: Exception) {}
+
+            if (storedFolders.isNotEmpty()) {
+                scanAndSyncFolders(storedFolders, announce = false)
+            }
+        }
+    }
+
+    // Vuelve a buscar archivos nuevos en todas las carpetas autorizadas.
+    fun refreshMusicFolders() {
+        val folders = _musicFolders.value
+        if (folders.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            scanAndSyncFolders(folders, announce = true)
+        }
+    }
+
+    // Escanea una sola carpeta; se usa al tocar la carpeta en el gestor.
+    fun rescanMusicFolder(folder: MusicFolder) {
+        viewModelScope.launch(Dispatchers.IO) {
+            scanAndSyncFolders(listOf(folder), announce = true)
+        }
+    }
+
+    // Añade (o vuelve a autorizar) una carpeta elegida con SAF y la escanea al momento.
+    fun addMusicFolder(treeUri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            getApplication<Application>().takePersistableReadPermission(treeUri)
+            val folder = fileManager.describeFolder(treeUri)
+            val current = _musicFolders.value
+            val updated = if (current.any { it.uri == treeUri }) {
+                current.map { if (it.uri == treeUri) folder else it }
+            } else {
+                current + folder
+            }
+            _musicFolders.value = updated
+            saveMusicFolders(updated)
+            scanAndSyncFolders(listOf(folder), announce = true)
+        }
+    }
+
+    // Quita una carpeta, libera su permiso y elimina solo las pistas que pertenecían a ella.
+    fun removeMusicFolder(folder: MusicFolder) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val updated = _musicFolders.value.filterNot { it.uri == folder.uri }
+            _musicFolders.value = updated
+            saveMusicFolders(updated)
+            getApplication<Application>().releasePersistableReadPermission(folder.uri)
+
+            scanMutex.withLock {
+                try {
+                    val remainingPrefixes = updated.map { it.songUriPrefix }
+                    val songs = songDao.getSongsByUriPrefix(folder.songUriPrefix)
+                    // Si hay una subcarpeta todavía autorizada, sus canciones no se borran.
+                    val songIds = songs
+                        .filter { song ->
+                            remainingPrefixes.none { prefix -> song.uriString.startsWith(prefix) }
+                        }
+                        .map { it.id }
+                    if (songIds.isNotEmpty()) {
+                        songDao.deleteSongsByIds(songIds)
+                        playlistDao.deletePlaylistSongsForSongIds(songIds)
+                    }
+                    _statusMessage.value = "Carpeta quitada: ${folder.displayName}"
+                } catch (e: Exception) {
+                    _statusMessage.value = "Carpeta quitada. Error al limpiar sus canciones: ${e.message}"
                 }
-            } catch (e: Exception) {
-                _statusMessage.value = "Error al escanear: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * scanAndSyncFolders: recorre cada carpeta con la lógica de Namida (BFS por SAF), inserta las
+     * pistas nuevas y elimina de Room las que ya no existen. Respeta favoritos porque la inserción
+     * usa IGNORE y solo borra las pistas ausentes.
+     */
+    private suspend fun scanAndSyncFolders(folders: List<MusicFolder>, announce: Boolean) {
+        if (folders.isEmpty()) return
+
+        scanMutex.withLock {
+            _isScanning.value = true
+            var newCount = 0
+            var scannedCount = 0
+            val failedFolders = mutableListOf<MusicFolder>()
+            val accessibleFolders = mutableSetOf<String>()
+
+            try {
+                for (folder in folders) {
+                    try {
+                        val existing = songDao.getSongsByUriPrefix(folder.songUriPrefix)
+                        val existingIds = existing.map { it.id }.toSet()
+                        val scanResult = fileManager.scanFolderFromTree(folder.uri)
+                        val scanned = scanResult.songs
+
+                        val newSongs = scanned.filter { it.id !in existingIds }
+                        if (scanned.isNotEmpty()) {
+                            songDao.insertSongs(scanned.map { SongEntity.fromDomain(it) })
+                        }
+
+                        // Solo se borra lo que ya no existe; si un archivo existe pero falló la
+                        // lectura de metadatos, se conserva en la biblioteca.
+                        val missingIds = existing
+                            .filter { it.uriString !in scanResult.discoveredUriStrings }
+                            .map { it.id }
+                        if (missingIds.isNotEmpty()) {
+                            songDao.deleteSongsByIds(missingIds)
+                            playlistDao.deletePlaylistSongsForSongIds(missingIds)
+                        }
+
+                        newCount += newSongs.size
+                        scannedCount += scanned.size
+                        accessibleFolders.add(folder.uriString)
+                    } catch (e: Exception) {
+                        android.util.Log.e("AuraViewModel", "Error scanning folder ${folder.displayName}", e)
+                        failedFolders.add(folder)
+                    }
+                }
+
+                // Una carpeta escaneada en esta sesión se muestra accesible aunque el proveedor
+                // no soporte permisos persistentes.
+                _musicFolders.value = _musicFolders.value.map { folder ->
+                    folder.copy(
+                        hasReadPermission = folder.uriString in accessibleFolders ||
+                            fileManager.hasPersistedReadPermission(folder.uri)
+                    )
+                }
+
+                val status = when {
+                    scannedCount == 0 && failedFolders.isNotEmpty() ->
+                        "No se pudo leer ${failedFolders.size} carpeta(s). Vuelve a autorizarlas."
+                    newCount > 0 && failedFolders.isNotEmpty() ->
+                        "Se encontraron $newCount archivos nuevos. ${failedFolders.size} carpeta(s) sin permiso."
+                    newCount > 0 -> "Se encontraron $newCount archivos nuevos"
+                    failedFolders.isNotEmpty() ->
+                        "Biblioteca actualizada. ${failedFolders.size} carpeta(s) sin permiso."
+                    announce -> "Biblioteca actualizada: no hay archivos nuevos"
+                    else -> null
+                }
+                if (status != null) {
+                    _statusMessage.value = status
+                }
             } finally {
                 _isScanning.value = false
             }
         }
+    }
+
+    private fun loadStoredMusicFolders(): List<MusicFolder> {
+        val raw = settingsPrefs.getString(MUSIC_FOLDERS_PREF_KEY, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    val uriString = item.optString("uri").takeIf { it.isNotBlank() } ?: continue
+                    val uri = Uri.parse(uriString)
+                    val storedName = item.optString("name").takeIf { it.isNotBlank() }
+                    val storedPath = item.optString("path").takeIf { it.isNotBlank() }
+                    add(
+                        MusicFolder(
+                            uri = uri,
+                            displayName = storedName ?: fileManager.getFolderDisplayName(uri),
+                            pathLabel = storedPath ?: fileManager.getFolderPathLabel(uri),
+                            hasReadPermission = fileManager.hasPersistedReadPermission(uri)
+                        )
+                    )
+                }
+            }.distinctBy { it.uriString }
+        } catch (e: Exception) {
+            android.util.Log.e("AuraViewModel", "Error reading saved music folders", e)
+            emptyList()
+        }
+    }
+
+    private fun saveMusicFolders(folders: List<MusicFolder>) {
+        val array = JSONArray()
+        folders.forEach { folder ->
+            array.put(
+                JSONObject()
+                    .put("uri", folder.uriString)
+                    .put("name", folder.displayName)
+                    .put("path", folder.pathLabel)
+            )
+        }
+        settingsPrefs.edit().putString(MUSIC_FOLDERS_PREF_KEY, array.toString()).apply()
     }
 
     // Importa una pista desde una URI concreta (intent, selector de archivos) y la reproduce.
@@ -390,36 +575,6 @@ class AuraViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 _isScanning.value = false
             }
-        }
-    }
-
-    // Importa todos los audios de una carpeta elegida con SAF.
-    fun importFolderFromTreeUri(treeUri: Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _isScanning.value = true
-            _statusMessage.value = "Escaneando carpeta seleccionada..."
-            try {
-                val songs = fileManager.scanFolderFromTree(treeUri)
-                if (songs.isNotEmpty()) {
-                    songDao.insertSongs(songs.map { SongEntity.fromDomain(it) })
-                    _statusMessage.value = "Se importaron ${songs.size} canciones de la carpeta"
-                } else {
-                    _statusMessage.value = "No se encontraron audios en la carpeta"
-                }
-            } catch (e: Exception) {
-                _statusMessage.value = "Error escaneando carpeta: ${e.message}"
-            } finally {
-                _isScanning.value = false
-            }
-        }
-    }
-
-    // Carga el contenido de una carpeta para el explorador de archivos.
-    fun loadDirectory(path: String?) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _currentDirectoryPath.value = path
-            val items = fileManager.listDirectory(path)
-            _directoryFiles.value = items
         }
     }
 

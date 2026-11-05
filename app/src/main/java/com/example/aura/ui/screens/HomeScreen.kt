@@ -33,7 +33,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -71,10 +70,10 @@ import com.example.ui.theme.AuraTextSecondary
 fun HomeScreen(
     songs: List<Song>,
     playlists: List<Playlist>,
+    musicFolderCount: Int,
     onSongClick: (Song) -> Unit,
     onPlaylistClick: (Playlist) -> Unit,
-    onOpenFileExplorer: () -> Unit,
-    onRequestPermission: () -> Unit
+    onOpenFileExplorer: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -106,7 +105,11 @@ fun HomeScreen(
             ) {
                 FeaturedCard(
                     title = "Gestor Local",
-                    subtitle = "Escanear celular & carpetas",
+                    subtitle = if (musicFolderCount > 0) {
+                        "$musicFolderCount carpeta(s) autorizada(s)"
+                    } else {
+                        "Elige tus carpetas de música"
+                    },
                     cardColor = AuraSecondaryBlue,
                     icon = Icons.Default.FolderOpen,
                     modifier = Modifier.weight(1f),
@@ -136,7 +139,6 @@ fun HomeScreen(
         if (songs.isEmpty()) {
             item {
                 EmptyLibraryState(
-                    onRequestPermission = onRequestPermission,
                     onOpenFileExplorer = onOpenFileExplorer
                 )
             }
@@ -297,7 +299,6 @@ fun HomeScreen(
 
 @Composable
 private fun EmptyLibraryState(
-    onRequestPermission: () -> Unit,
     onOpenFileExplorer: () -> Unit
 ) {
     Column(
@@ -329,7 +330,7 @@ private fun EmptyLibraryState(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "AURA necesita permiso para leer la música de tu teléfono, o puedes importar archivos y carpetas manualmente.",
+            text = "AURA solo leerá las carpetas que elijas. Añade la ruta donde guardas tu música para empezar.",
             style = MaterialTheme.typography.bodyMedium,
             color = AuraTextSecondary,
             textAlign = TextAlign.Center,
@@ -337,16 +338,12 @@ private fun EmptyLibraryState(
         )
         Spacer(modifier = Modifier.height(20.dp))
         Button(
-            onClick = onRequestPermission,
+            onClick = onOpenFileExplorer,
             colors = ButtonDefaults.buttonColors(containerColor = AuraPrimaryPurple)
         ) {
-            Text("Permitir acceso a música")
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedButton(onClick = onOpenFileExplorer) {
             Icon(Icons.Default.FolderOpen, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Importar archivos")
+            Text("Elegir carpeta de música")
         }
     }
 }

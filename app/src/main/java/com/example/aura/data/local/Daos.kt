@@ -48,6 +48,18 @@ interface SongDao {
     @Query("DELETE FROM songs WHERE id = :songId")
     suspend fun deleteSong(songId: String)
 
+    // Canciones que pertenecen a una carpeta SAF (el URI del documento empieza por el tree URI).
+    @Query("SELECT * FROM songs WHERE substr(uriString, 1, length(:prefix)) = :prefix")
+    suspend fun getSongsByUriPrefix(prefix: String): List<SongEntity>
+
+    // Borra varias canciones por id (archivos eliminados de una carpeta).
+    @Query("DELETE FROM songs WHERE id IN (:songIds)")
+    suspend fun deleteSongsByIds(songIds: List<String>)
+
+    // Elimina las detecciones antiguas de MediaStore (escaneo global de todo el celular).
+    @Query("DELETE FROM songs WHERE id GLOB 'media_*'")
+    suspend fun deleteMediaStoreSongs()
+
     // Elimina audios cortos (menos de 1 minuto / 60,000 ms), notas de voz de WhatsApp y tonos.
     @Query("DELETE FROM songs WHERE durationMs < :minDurationMs OR title LIKE 'PTT-%' OR title LIKE 'AUD-%' OR filePath LIKE '%WhatsApp%' OR filePath LIKE '%Ringtones%' OR filePath LIKE '%Notifications%'")
     suspend fun deleteShortAudioAndVoiceNotes(minDurationMs: Long = 60000L)
@@ -97,4 +109,8 @@ interface PlaylistDao {
     // Vacía todas las canciones de una lista.
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId")
     suspend fun clearPlaylistSongs(playlistId: String)
+
+    // Limpia relaciones huérfanas cuando se eliminan canciones de una carpeta.
+    @Query("DELETE FROM playlist_songs WHERE songId IN (:songIds)")
+    suspend fun deletePlaylistSongsForSongIds(songIds: List<String>)
 }
