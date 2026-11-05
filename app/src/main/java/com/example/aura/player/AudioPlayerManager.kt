@@ -1,5 +1,13 @@
 package com.example.aura.player
 
+/**
+ * ARCHIVO: AudioPlayerManager.kt
+ * FUNCIÓN: Núcleo de reproducción. Envuelve MediaPlayer, mantiene el estado observable
+ *          (pista actual, play/pause, posición, cola, shuffle, repeat, sleep timer) y expone
+ *          las acciones de control. Es un singleton compartido con el servicio de notificación.
+ * NAVEGACIÓN: AuraViewModel/AuraApp/PlayerScreen -> AudioPlayerManager -> MusicPlaybackService.
+ */
+
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -45,6 +53,10 @@ internal fun pickShuffleIndex(
     return candidates[random.nextInt(candidates.size)]
 }
 
+/**
+ * AudioPlayerManager: gestor único de reproducción de la app.
+ * Todos los estados son StateFlow para que Compose se actualice automáticamente.
+ */
 class AudioPlayerManager private constructor(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main)
@@ -116,6 +128,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Programa el apagado automático: al agotarse, detiene la reproducción y el servicio.
     fun setSleepTimer(minutes: Int) {
         cancelSleepTimer()
         if (minutes <= 0) return
@@ -134,6 +147,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Cancela el temporizador de apagado y reinicia la cuenta atrás.
     fun cancelSleepTimer() {
         sleepTimerJob?.cancel()
         sleepTimerJob = null
@@ -144,6 +158,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         initMediaPlayer()
     }
 
+    // Crea/reinicia MediaPlayer y registra los listeners de preparación, fin y error.
     private fun initMediaPlayer() {
         releasePlayer()
         mediaPlayer = MediaPlayer().apply {
@@ -178,6 +193,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Reproduce una canción y, si se indica, reemplaza la cola actual.
     fun playSong(song: Song, newQueue: List<Song>? = null) {
         if (newQueue != null && newQueue.isNotEmpty()) {
             _queue.value = newQueue
@@ -195,6 +211,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         resetShuffleHistory()
     }
 
+    // Carga la URI de la pista en MediaPlayer y prepara la reproducción asíncrona.
     private fun playTrack(song: Song) {
         _currentSong.value = song
         _currentPositionMs.value = 0L
@@ -216,6 +233,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Alterna entre reproducir y pausar; si no hay pista activa, arranca la primera de la cola.
     fun togglePlayPause() {
         if (_currentSong.value == null && _queue.value.isNotEmpty()) {
             playTrack(_queue.value.first())
@@ -251,6 +269,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Pausa la reproducción sin liberar el reproductor (pérdida de foco, audio ruidoso, etc.).
     private fun pausePlayback() {
         try {
             mediaPlayer?.let { mp ->
@@ -279,6 +298,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Salta a una posición concreta de la pista (ms).
     fun seekTo(positionMs: Long) {
         val mp = mediaPlayer ?: return
         try {
@@ -289,6 +309,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Pasa a la siguiente pista (aleatoria si shuffle está activo; respeta repeat ALL).
     fun next() {
         val q = _queue.value
         if (q.isEmpty()) return
@@ -321,6 +342,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Vuelve a la pista anterior; si han pasado >3 s, reinicia la actual.
     fun previous() {
         val q = _queue.value
         if (q.isEmpty()) return
@@ -342,6 +364,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Callback de fin de pista: repite una o avanza según el modo repeat.
     private fun handleTrackCompletion() {
         when (_repeatMode.value) {
             RepeatMode.ONE -> {
@@ -353,6 +376,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Activa/desactiva la reproducción aleatoria.
     fun toggleShuffle() {
         _isShuffle.value = !_isShuffle.value
         resetShuffleHistory()
@@ -363,6 +387,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         shuffledPlayedIndices.add(_currentIndex.value)
     }
 
+    // Ciclo del modo repeat: OFF -> ALL -> ONE -> OFF.
     fun toggleRepeat() {
         _repeatMode.value = when (_repeatMode.value) {
             RepeatMode.OFF -> RepeatMode.ALL
@@ -371,6 +396,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Añade una pista al final de la cola; si no hay nada sonando, la reproduce.
     fun addToQueue(song: Song) {
         _queue.value = _queue.value + song
         if (_currentSong.value == null) {
@@ -378,6 +404,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Elimina una pista de la cola y ajusta el índice actual si es necesario.
     fun removeFromQueue(index: Int) {
         val curList = _queue.value.toMutableList()
         if (index in curList.indices) {
@@ -397,6 +424,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Reordena la cola moviendo una pista de una posición a otra.
     fun reorderQueue(from: Int, to: Int) {
         val curList = _queue.value.toMutableList()
         if (from in curList.indices && to in curList.indices) {
@@ -470,6 +498,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Bucle que publica la posición actual cada 250 ms mientras suena la pista.
     private fun startProgressTracker() {
         stopProgressTracker()
         progressJob = scope.launch {
@@ -485,11 +514,13 @@ class AudioPlayerManager private constructor(private val context: Context) {
         }
     }
 
+    // Detiene el bucle de seguimiento de progreso.
     private fun stopProgressTracker() {
         progressJob?.cancel()
         progressJob = null
     }
 
+    // Libera MediaPlayer y todos los recursos asociados (llamado al cerrar la app/ViewModel).
     fun releasePlayer() {
         stopProgressTracker()
         unregisterNoisyReceiver()
@@ -505,6 +536,7 @@ class AudioPlayerManager private constructor(private val context: Context) {
         @Volatile
         private var INSTANCE: AudioPlayerManager? = null
 
+        // Singleton: una sola instancia de reproducción compartida por UI y servicio.
         fun getInstance(context: Context): AudioPlayerManager {
             return INSTANCE ?: synchronized(this) {
                 val instance = AudioPlayerManager(context.applicationContext)

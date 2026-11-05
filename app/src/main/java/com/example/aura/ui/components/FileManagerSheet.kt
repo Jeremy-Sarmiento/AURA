@@ -1,5 +1,12 @@
 package com.example.aura.ui.components
 
+/**
+ * ARCHIVO: FileManagerSheet.kt
+ * FUNCIÓN: Hoja inferior del gestor de archivos. Pestaña 1: escanear MediaStore, seleccionar
+ *          archivos o una carpeta completa (SAF). Pestaña 2: explorador de directorios del equipo.
+ * NAVEGACIÓN: AuraApp (showFileManagerSheet) -> FileManagerSheet -> AuraViewModel/LocalFileManager.
+ */
+
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -81,6 +88,10 @@ import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+/**
+ * FileManagerSheet: dos modos (importación rápida y explorador), con estado de escaneo y
+ * navegación de carpetas. Los launchers SAF eligen archivos o carpetas.
+ */
 fun FileManagerSheet(
     sheetState: SheetState,
     isScanning: Boolean,
@@ -351,6 +362,9 @@ fun FileManagerSheet(
 }
 
 @Composable
+/**
+ * ActionCard: tarjeta de acción del gestor (escanear, seleccionar archivos, seleccionar carpeta).
+ */
 private fun ActionCard(
     title: String,
     subtitle: String,
@@ -402,6 +416,9 @@ private fun ActionCard(
 }
 
 @Composable
+/**
+ * FileItemRow: fila del explorador; distingue carpeta, audio lossless y audio comprimido.
+ */
 private fun FileItemRow(
     item: FileItem,
     onClick: () -> Unit
@@ -475,6 +492,7 @@ private fun FileItemRow(
     }
 }
 
+// Convierte bytes a un texto legible (KB/MB) para el explorador.
 private fun formatFileSize(bytes: Long): String {
     if (bytes <= 0) return "0 B"
     val kb = bytes / 1024.0

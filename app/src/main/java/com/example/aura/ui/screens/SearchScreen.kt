@@ -1,5 +1,12 @@
 package com.example.aura.ui.screens
 
+/**
+ * ARCHIVO: SearchScreen.kt
+ * FUNCIÓN: Pantalla de búsqueda con campo de texto, tarjetas de género y listado de resultados.
+ *          El filtrado real ocurre en AuraViewModel.searchResults.
+ * NAVEGACIÓN: AuraApp (AuraScreen.SEARCH) -> SearchScreen -> callbacks al ViewModel/reproductor.
+ */
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -70,6 +77,9 @@ private val filterColors = listOf(
 )
 
 @Composable
+/**
+ * SearchScreen: buscador de canciones/artistas/álbumes con filtros por género.
+ */
 fun SearchScreen(
     query: String,
     selectedArtist: String?,
@@ -311,6 +321,9 @@ fun SearchScreen(
     }
 }
 
+/**
+ * ArtistCard: tarjeta pulsable que activa/desactiva el filtro por género/artista.
+ */
 @Composable
 private fun ArtistCard(
     title: String,

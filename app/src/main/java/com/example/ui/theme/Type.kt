@@ -1,5 +1,11 @@
 package com.example.ui.theme
 
+/**
+ * ARCHIVO: Type.kt
+ * FUNCIÓN: Tipografía base de AURA (Typography de Material 3). Por ahora define bodyLarge y deja
+ *          el resto de estilos con los valores por defecto.
+ */
+
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -25,7 +31,7 @@ val AuraBadge = TextStyle(
   letterSpacing = 0.5.sp,
 )
 
-// Set of Material typography styles to start with
+// Conjunto de estilos tipográficos usado por MaterialTheme en Theme.kt.
 val Typography =
   Typography(
     bodyLarge =

@@ -1,5 +1,12 @@
 package com.example.aura.ui.screens
 
+/**
+ * ARCHIVO: LyricsScreen.kt
+ * FUNCIÓN: Muestra las letras sincronizadas (LRC). Resalta la línea activa según la posición de
+ *          reproducción, hace auto-scroll y permite saltar a una línea tocándola.
+ * NAVEGACIÓN: AuraApp (AuraScreen.LYRICS) -> LyricsScreen -> playerManager.seekTo.
+ */
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +56,9 @@ import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
+/**
+ * LyricsScreen: lista de LyricLine con resaltado de la línea actual y salto por tiempo.
+ */
 fun LyricsScreen(
     currentSong: Song?,
     lyrics: List<LyricLine>,

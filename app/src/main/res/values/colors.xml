@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ARCHIVO: colors.xml - Colores base de Android usados por el tema XML (no confundir con ui/theme/Color.kt). -->
 <resources>
+    <!-- Paleta Material básica y colores neutros. -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>

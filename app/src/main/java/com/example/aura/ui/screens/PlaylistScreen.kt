@@ -1,5 +1,12 @@
 package com.example.aura.ui.screens
 
+/**
+ * ARCHIVO: PlaylistScreen.kt
+ * FUNCIÓN: Detalle de una lista de reproducción: cabecera, botón "reproducir todo", lista numerada
+ *          de pistas, favoritos y eliminación (si es una lista personalizada).
+ * NAVEGACIÓN: AuraApp (AuraScreen.PLAYLIST_DETAIL) -> PlaylistScreen -> ViewModel/playerManager.
+ */
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -69,6 +76,9 @@ import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
+/**
+ * PlaylistScreen: cabecera + reproducción completa + pistas numeradas de la lista.
+ */
 fun PlaylistScreen(
     playlist: Playlist,
     songs: List<Song>,

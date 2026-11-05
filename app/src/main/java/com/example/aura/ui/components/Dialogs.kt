@@ -1,5 +1,12 @@
 package com.example.aura.ui.components
 
+/**
+ * ARCHIVO: Dialogs.kt
+ * FUNCIÓN: Diálogos reutilizables de la app: crear lista de reproducción, información de la pista
+ *          y temporizador de apagado (sleep timer). Incluye la fila de datos InfoRow.
+ * NAVEGACIÓN: AuraApp abre estos diálogos; las acciones llegan al ViewModel/AudioPlayerManager.
+ */
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +58,9 @@ import com.example.ui.theme.AuraPrimaryPurpleLight
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
+/**
+ * CreatePlaylistDialog: pide nombre, descripción y color de portada para una nueva lista.
+ */
 fun CreatePlaylistDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, description: String, colorHex: Long) -> Unit
@@ -170,6 +180,9 @@ fun CreatePlaylistDialog(
 }
 
 @Composable
+/**
+ * SongInfoDialog: ficha técnica de la pista (formato, calidad, sample rate, ruta, etc.).
+ */
 fun SongInfoDialog(
     song: Song,
     onDismiss: () -> Unit
@@ -216,6 +229,9 @@ fun SongInfoDialog(
 }
 
 @Composable
+/**
+ * InfoRow: fila etiqueta/valor usada dentro de SongInfoDialog.
+ */
 private fun InfoRow(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -235,6 +251,9 @@ private fun InfoRow(label: String, value: String) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
+/**
+ * SleepTimerDialog: permite elegir 15/30/45/60 min, ver el tiempo restante o desactivar el timer.
+ */
 fun SleepTimerDialog(
     remainingMs: Long,
     onSetTimer: (minutes: Int) -> Unit,

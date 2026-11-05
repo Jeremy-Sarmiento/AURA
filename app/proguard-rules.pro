@@ -1,3 +1,6 @@
+# ARCHIVO: app/proguard-rules.pro
+# FUNCIÓN: Reglas de ProGuard/R8 para el build de release. Actualmente solo contiene la plantilla;
+#          se ampliaría si se activara la minificación (isMinifyEnabled = true).
 # Add project specific ProGuard rules here.
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.

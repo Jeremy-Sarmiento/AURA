@@ -1,5 +1,12 @@
 package com.example.aura.data.storage
 
+/**
+ * ARCHIVO: LocalFileManager.kt
+ * FUNCIÓN: Acceso al almacenamiento local: escaneo de MediaStore, lectura de metadatos de URIs (SAF),
+ *          importación de carpetas y exploración de directorios física. Devuelve modelos Song.
+ * NAVEGACIÓN: AuraViewModel -> LocalFileManager; la UI abre el flujo desde FileManagerSheet.
+ */
+
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
@@ -26,8 +33,15 @@ fun Context.takePersistableReadPermission(uri: Uri) {
 
 class LocalFileManager(private val context: Context) {
 
+    companion object {
+        // Duración mínima de 1 minuto (60,000 ms) para ignorar notas de voz, tonos y sonidos cortos
+        const val MIN_SONG_DURATION_MS = 60_000L
+    }
+
     /**
-     * Scans Android MediaStore for local audio files.
+     * scanMediaStore: recorre MediaStore.Audio y devuelve las pistas de música del dispositivo
+     * que duran más de 1 minuto y descarta audios de WhatsApp, notas de voz (PTT), tonos de llamada
+     * y sonidos del sistema.
      */
     suspend fun scanMediaStore(): List<Song> = withContext(Dispatchers.IO) {
         val songList = mutableListOf<Song>()
@@ -42,7 +56,8 @@ class LocalFileManager(private val context: Context) {
             MediaStore.Audio.Media.DATE_ADDED
         )
 
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        // Filtra en MediaStore por categoría música y duración >= 1 minuto (60,000 ms)
+        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= $MIN_SONG_DURATION_MS"
         val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
 
         try {
@@ -72,33 +87,42 @@ class LocalFileManager(private val context: Context) {
                     val path = if (dataCol >= 0) c.getString(dataCol) else null
                     val mime = if (mimeCol >= 0) c.getString(mimeCol) ?: "" else ""
 
-                    val contentUri = ContentUris.withAppendedId(
-                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                        id
-                    )
+                    val pathLower = path?.lowercase() ?: ""
+                    val titleLower = title.lowercase()
 
-                    val format = detectFormat(path, mime)
-                    val isLossless = isFormatLossless(format)
-                    val specs = extractMetadataForUri(contentUri, isLossless)
+                    // Filtrar estrictamente notas de voz de WhatsApp, audios PTT/AUD, tonos y notificaciones
+                    val isWhatsApp = pathLower.contains("whatsapp") || titleLower.startsWith("ptt-") || titleLower.startsWith("aud-")
+                    val isRingtoneOrNotif = pathLower.contains("ringtones") || pathLower.contains("notifications") || pathLower.contains("alarms")
 
-                    songList.add(
-                        Song(
-                            id = "media_$id",
-                            title = title,
-                            artist = artist,
-                            album = album,
-                            durationMs = duration,
-                            uriString = contentUri.toString(),
-                            filePath = path,
-                            format = format,
-                            sampleRate = specs.sampleRate,
-                            bitDepth = specs.bitDepth,
-                            bitrateKbps = specs.bitrateKbps,
-                            isLossless = isLossless,
-                            lyrics = readSiblingLyrics(path),
-                            coverColorHex = getPaletteColor(title.hashCode())
+                    if (duration >= MIN_SONG_DURATION_MS && !isWhatsApp && !isRingtoneOrNotif) {
+                        val contentUri = ContentUris.withAppendedId(
+                            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                            id
                         )
-                    )
+
+                        val format = detectFormat(path, mime)
+                        val isLossless = isFormatLossless(format)
+                        val specs = extractMetadataForUri(contentUri, isLossless)
+
+                        songList.add(
+                            Song(
+                                id = "media_$id",
+                                title = title,
+                                artist = artist,
+                                album = album,
+                                durationMs = duration,
+                                uriString = contentUri.toString(),
+                                filePath = path,
+                                format = format,
+                                sampleRate = specs.sampleRate,
+                                bitDepth = specs.bitDepth,
+                                bitrateKbps = specs.bitrateKbps,
+                                isLossless = isLossless,
+                                lyrics = readSiblingLyrics(path),
+                                coverColorHex = getPaletteColor(title.hashCode())
+                            )
+                        )
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -109,7 +133,8 @@ class LocalFileManager(private val context: Context) {
     }
 
     /**
-     * Parse audio file from a specific picked Uri (SAF).
+     * parseSongFromUri: lee una URI concreta (selector SAF o explorador) con MediaMetadataRetriever,
+     * comprueba que dure más de 1 minuto y descarta notas de voz o tonos.
      */
     suspend fun parseSongFromUri(uri: Uri): Song? = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
@@ -124,6 +149,16 @@ class LocalFileManager(private val context: Context) {
                 ?: "Álbum Local"
             val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
             val durationMs = durationStr?.toLongOrNull() ?: 0L
+            val titleLower = title.lowercase()
+            val uriLower = uri.toString().lowercase()
+
+            val isWhatsApp = uriLower.contains("whatsapp") || titleLower.startsWith("ptt-") || titleLower.startsWith("aud-")
+            val isRingtoneOrNotif = uriLower.contains("ringtones") || uriLower.contains("notifications") || uriLower.contains("alarms")
+
+            // Filtrar audios de menos de 1 minuto, WhatsApp o notificaciones
+            if (durationMs < MIN_SONG_DURATION_MS || isWhatsApp || isRingtoneOrNotif) {
+                return@withContext null
+            }
 
             val fileName = uri.lastPathSegment ?: ""
             val format = when {
@@ -215,7 +250,8 @@ class LocalFileManager(private val context: Context) {
     )
 
     /**
-     * Scan folder picked via SAF (OpenDocumentTree) using DocumentsContract.
+     * scanFolderFromTree: recorre una carpeta elegida con SAF y devuelve solo canciones
+     * con duración mayor o igual a 1 minuto.
      */
     suspend fun scanFolderFromTree(treeUri: Uri): List<Song> = withContext(Dispatchers.IO) {
         val results = mutableListOf<Song>()
@@ -248,7 +284,11 @@ class LocalFileManager(private val context: Context) {
                             name.endsWith(".ogg", ignoreCase = true)
 
                     if (isAudio) {
-                        parseSongFromUri(docUri)?.let { results.add(it) }
+                        parseSongFromUri(docUri)?.let { song ->
+                            if (song.durationMs >= MIN_SONG_DURATION_MS) {
+                                results.add(song)
+                            }
+                        }
                     }
                 }
             }
@@ -259,7 +299,7 @@ class LocalFileManager(private val context: Context) {
     }
 
     /**
-     * Lists physical device directories for integrated file explorer.
+     * listDirectory: lista carpetas/archivos de una ruta física para el explorador integrado.
      */
     fun listDirectory(path: String?): List<FileItem> {
         val dir = if (path.isNullOrEmpty()) {
@@ -330,6 +370,9 @@ class LocalFileManager(private val context: Context) {
     }
 }
 
+/**
+ * FileItem: elemento mostrado por el explorador de archivos (carpeta, audio o archivo).
+ */
 data class FileItem(
     val name: String,
     val absolutePath: String,

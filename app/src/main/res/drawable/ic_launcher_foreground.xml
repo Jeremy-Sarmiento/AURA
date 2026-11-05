@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  ARCHIVO: ic_launcher_foreground.xml
+  FUNCIÓN: Primer plano del icono adaptativo: coloca el logo aura_icon centrado.
+  NAVEGACIÓN: Referenciado por mipmap-anydpi-v26/ic_launcher.xml y ic_launcher_round.xml.
+-->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:width="66dp"

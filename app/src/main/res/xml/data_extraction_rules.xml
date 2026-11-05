@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?><!--
+  ARCHIVO: data_extraction_rules.xml
+  FUNCIÓN: Reglas de backup/transferencia para Android 12+ (data-extraction-rules).
+           Define qué datos se incluyen o excluyen en cloud-backup y device-transfer.
+-->
+<!--
    Sample data extraction rules file; uncomment and customize as necessary.
    See https://developer.android.com/about/versions/12/backup-restore#xml-changes
    for details.

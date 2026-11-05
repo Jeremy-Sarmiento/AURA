@@ -1,5 +1,11 @@
 package com.example.aura.ui.screens
 
+/**
+ * ARCHIVO: ArtistScreen.kt
+ * FUNCIÓN: Detalle de artista local: avatar, oyentes, botón seguir y lista de canciones populares.
+ * NAVEGACIÓN: AuraApp (AuraScreen.ARTIST_DETAIL) -> ArtistScreen -> ViewModel/playerManager.
+ */
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +61,9 @@ import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
+/**
+ * ArtistScreen: información del artista y sus pistas, con botón Seguir/Siguiendo.
+ */
 fun ArtistScreen(
     artist: Artist,
     songs: List<Song>,

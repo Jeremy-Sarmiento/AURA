@@ -1,5 +1,12 @@
 package com.example.aura.ui.screens
 
+/**
+ * ARCHIVO: QueueScreen.kt
+ * FUNCIÓN: Muestra la cola de reproducción: pista actual y próximas pistas, con opción de
+ *          seleccionar o quitar elementos de la cola.
+ * NAVEGACIÓN: AuraApp (AuraScreen.QUEUE) -> QueueScreen -> AudioPlayerManager.
+ */
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +61,9 @@ import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
+/**
+ * QueueScreen: sección "REPRODUCIENDO" + lista "SIGUIENTE" con acción de quitar de la cola.
+ */
 fun QueueScreen(
     currentSong: Song?,
     queue: List<Song>,

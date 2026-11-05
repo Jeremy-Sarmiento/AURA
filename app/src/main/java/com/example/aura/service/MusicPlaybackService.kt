@@ -1,5 +1,13 @@
 package com.example.aura.service
 
+/**
+ * ARCHIVO: MusicPlaybackService.kt
+ * FUNCIÓN: Servicio en primer plano que muestra la notificación multimedia (MediaStyle) y la
+ *          sesión de medios (MediaSessionCompat). Escucha el estado de AudioPlayerManager y
+ *          responde a los botones de la notificación/candado.
+ * NAVEGACIÓN: AudioPlayerManager.startService() -> este servicio -> AudioPlayerManager (controles).
+ */
+
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -36,18 +44,21 @@ class MusicPlaybackService : Service() {
     private var observerJob: Job? = null
 
     companion object {
+        // Identificadores de canal y notificación de reproducción.
         const val CHANNEL_ID = "aura_musica_primer_plano"
         const val NOTIFICATION_ID = 1001
 
         // Controlado desde Ajustes; se aplica a la visibilidad en pantalla de bloqueo.
         var showOnLockscreen: Boolean = true
 
+        // Acciones que llegan desde los botones de la notificación.
         const val ACTION_PLAY_PAUSE = "com.example.aura.ACTION_PLAY_PAUSE"
         const val ACTION_NEXT = "com.example.aura.ACTION_NEXT"
         const val ACTION_PREVIOUS = "com.example.aura.ACTION_PREVIOUS"
         const val ACTION_STOP = "com.example.aura.ACTION_STOP"
         const val ACTION_SYNC = "com.example.aura.ACTION_SYNC"
 
+        // Arranca el servicio en primer plano y sincroniza la notificación con el estado actual.
         fun startService(context: Context) {
             val intent = Intent(context, MusicPlaybackService::class.java).apply {
                 action = ACTION_SYNC
@@ -59,12 +70,14 @@ class MusicPlaybackService : Service() {
             }
         }
 
+        // Detiene el servicio y retira la notificación.
         fun stopService(context: Context) {
             // Detiene el servicio; no lo arranca si no estaba corriendo (ACTION_STOP lo resucitaba).
             context.stopService(Intent(context, MusicPlaybackService::class.java))
         }
     }
 
+    // Ciclo de vida: obtiene el reproductor, crea el canal, la sesión de medios y observa el estado.
     override fun onCreate() {
         super.onCreate()
         playerManager = AudioPlayerManager.getInstance(this)
@@ -73,6 +86,7 @@ class MusicPlaybackService : Service() {
         observePlayerState()
     }
 
+    // Atiende las acciones enviadas por la notificación y el sistema.
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_PLAY_PAUSE -> {
@@ -96,26 +110,32 @@ class MusicPlaybackService : Service() {
         return START_NOT_STICKY
     }
 
+    // Crea la MediaSession y conecta sus callbacks con AudioPlayerManager.
     private fun setupMediaSession() {
         mediaSession = MediaSessionCompat(this, "AuraMediaSession").apply {
             isActive = true
             setCallback(object : MediaSessionCompat.Callback() {
+                // Callback de la sesión: reanuda la reproducción.
                 override fun onPlay() {
                     playerManager.togglePlayPause()
                 }
 
+                // Callback de la sesión: pausa la reproducción.
                 override fun onPause() {
                     playerManager.togglePlayPause()
                 }
 
+                // Callback de la sesión: salta a la siguiente pista de la cola.
                 override fun onSkipToNext() {
                     playerManager.next()
                 }
 
+                // Callback de la sesión: vuelve a la pista anterior.
                 override fun onSkipToPrevious() {
                     playerManager.previous()
                 }
 
+                // Callback de la sesión: detiene la reproducción y cierra el servicio en primer plano.
                 override fun onStop() {
                     if (playerManager.isPlaying.value) {
                         playerManager.togglePlayPause()
@@ -126,6 +146,7 @@ class MusicPlaybackService : Service() {
         }
     }
 
+    // Observa canción actual y estado play/pause para refrescar la notificación.
     private fun observePlayerState() {
         observerJob?.cancel()
         observerJob = serviceScope.launch {
@@ -142,6 +163,7 @@ class MusicPlaybackService : Service() {
         }
     }
 
+    // Publica la notificación en primer plano (o la actualiza si ya estaba visible).
     private fun updateNotification(song: Song?, isPlaying: Boolean) {
         if (song == null) {
             return
@@ -168,6 +190,7 @@ class MusicPlaybackService : Service() {
         }
     }
 
+    // Sincroniza el estado de reproducción con la MediaSession (candado/pantalla bloqueada).
     private fun updatePlaybackState(isPlaying: Boolean) {
         val state = if (isPlaying) {
             PlaybackStateCompat.STATE_PLAYING
@@ -189,6 +212,7 @@ class MusicPlaybackService : Service() {
         mediaSession?.setPlaybackState(playbackState)
     }
 
+    // Construye la notificación MediaStyle con carátula, metadatos y controles.
     private fun buildMediaNotification(song: Song, isPlaying: Boolean): Notification {
         val contentIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -267,6 +291,7 @@ class MusicPlaybackService : Service() {
         return builder.build()
     }
 
+    // Genera una carátula cuadrada de color con una nota musical (sin imágenes externas).
     private fun createColoredCoverBitmap(colorHex: Long): Bitmap {
         val size = 128
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -289,6 +314,7 @@ class MusicPlaybackService : Service() {
         return bitmap
     }
 
+    // Crea el canal de notificación (Android 8+) para la reproducción multimedia.
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -307,6 +333,7 @@ class MusicPlaybackService : Service() {
         }
     }
 
+    // Quita la notificación del primer plano y detiene el servicio.
     private fun stopForegroundService() {
         observerJob?.cancel()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -318,6 +345,7 @@ class MusicPlaybackService : Service() {
         stopSelf()
     }
 
+    // Si el usuario desliza la app fuera de recientes, detiene la música y el servicio.
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         // Cuando el usuario cierra la aplicación por completo (deslizada de la lista de tareas recientes):
@@ -326,6 +354,7 @@ class MusicPlaybackService : Service() {
         stopForegroundService()
     }
 
+    // Limpieza final: cancela corrutinas, detiene el reproductor y libera la MediaSession.
     override fun onDestroy() {
         observerJob?.cancel()
         serviceScope.cancel()
@@ -336,5 +365,6 @@ class MusicPlaybackService : Service() {
         super.onDestroy()
     }
 
+    // Servicio no vinculable: la comunicación es por intents y estado compartido.
     override fun onBind(intent: Intent?): IBinder? = null
 }

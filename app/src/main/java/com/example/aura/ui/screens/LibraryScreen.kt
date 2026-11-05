@@ -1,5 +1,12 @@
 package com.example.aura.ui.screens
 
+/**
+ * ARCHIVO: LibraryScreen.kt
+ * FUNCIÓN: Pantalla de biblioteca con pestañas: canciones, listas y carpetas. Permite reproducir,
+ *          marcar favoritos, añadir a listas, crear listas y abrir el gestor de archivos.
+ * NAVEGACIÓN: AuraApp (AuraScreen.LIBRARY) -> LibraryScreen -> AuraViewModel / playerManager.
+ */
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -74,6 +81,9 @@ import com.example.ui.theme.AuraTextMuted
 import com.example.ui.theme.AuraTextSecondary
 
 @Composable
+/**
+ * LibraryScreen: biblioteca local organizada en tres pestañas (Canciones / Listas / Carpetas).
+ */
 fun LibraryScreen(
     songs: List<Song>,
     playlists: List<Playlist>,
@@ -377,6 +387,9 @@ private fun EmptyTabState(
     }
 }
 
+/**
+ * SongListItem: fila de canción con botón de favorito y menú para añadirla a una lista.
+ */
 @Composable
 private fun SongListItem(
     song: Song,
