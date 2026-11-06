@@ -7,6 +7,75 @@ import org.junit.Test
 
 class AppLockTest {
     @Test
+    fun `a brief background visit restores the authenticated session without a prompt`() {
+        val lock = AppLock()
+        lock.beginAuthentication()
+        lock.authenticated()
+        lock.onBackground(10_000L)
+        assertFalse(lock.isUnlocked)
+        lock.onForeground(11_000L)
+        assertTrue(lock.isUnlocked)
+        assertFalse(lock.beginAuthentication())
+    }
+
+    @Test
+    fun `a return just before two minutes keeps the session but the limit requires authentication`() {
+        for (elapsed in listOf(119_999L, 120_000L, 120_001L)) {
+            val lock = AppLock()
+            lock.beginAuthentication()
+            lock.authenticated()
+            lock.onBackground(1_000L)
+            lock.onForeground(1_000L + elapsed)
+            assertEquals("elapsed=$elapsed", elapsed < 120_000L, lock.isUnlocked)
+            assertEquals("elapsed=$elapsed", elapsed >= 120_000L, lock.beginAuthentication())
+        }
+    }
+
+    @Test
+    fun `an unauthenticated or cancelled session cannot use the grace period`() {
+        val lock = AppLock()
+        lock.beginAuthentication()
+        lock.onBackground(1_000L)
+        lock.authenticated()
+        lock.onForeground(2_000L)
+        assertFalse(lock.isUnlocked)
+        lock.beginAuthentication()
+        lock.authenticationError("Cancelado")
+        lock.onBackground(3_000L)
+        lock.onForeground(4_000L)
+        assertFalse(lock.isUnlocked)
+    }
+
+    @Test
+    fun `each exit starts a new grace period and foreground events do not extend it`() {
+        val lock = AppLock()
+        lock.beginAuthentication()
+        lock.authenticated()
+        lock.onBackground(0L)
+        lock.onForeground(119_999L)
+        lock.onForeground(120_000L)
+        assertTrue(lock.isUnlocked)
+        lock.onBackground(130_000L)
+        lock.onForeground(250_000L)
+        assertFalse(lock.isUnlocked)
+        lock.onForeground(250_001L)
+        assertFalse(lock.isUnlocked)
+    }
+
+    @Test
+    fun `pending picker results are released after a short return without another fingerprint`() {
+        val lock = AppLock()
+        lock.beginAuthentication()
+        lock.authenticated()
+        lock.onBackground(1_000L)
+        lock.deferActivityResult(12, -1, null)
+        assertTrue(lock.takeActivityResults().isEmpty())
+        lock.onForeground(2_000L)
+        assertEquals(12, lock.takeActivityResults().single().requestCode)
+        assertTrue(lock.takeActivityResults().isEmpty())
+    }
+
+    @Test
     fun `file picker results wait for authentication and are delivered only once`() {
         val lock = AppLock()
         lock.deferActivityResult(12, -1, null)

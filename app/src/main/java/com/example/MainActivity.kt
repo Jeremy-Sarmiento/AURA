@@ -17,6 +17,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -75,9 +76,7 @@ class MainActivity : FragmentActivity() {
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     appLock.authenticated()
-                    appLock.takeActivityResults().forEach { pending ->
-                        deliverActivityResult(pending.requestCode, pending.resultCode, pending.data)
-                    }
+                    processPendingActions()
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -162,9 +161,23 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    override fun onStart() {
+        // Evalúa la sesión antes de que se entreguen resultados de actividades externas.
+        appLock.onForeground(SystemClock.elapsedRealtime())
+        super.onStart()
+    }
+
     override fun onResume() {
         super.onResume()
+        processPendingActions()
         authenticate()
+    }
+
+    private fun processPendingActions() {
+        appLock.takeActivityResults().forEach { pending ->
+            deliverActivityResult(pending.requestCode, pending.resultCode, pending.data)
+        }
+        viewModelInstance?.let { handleIncomingIntent(intent, it) }
     }
 
     // Los selectores externos no deben importar archivos antes de volver a autenticarse.
@@ -183,7 +196,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         if (!isChangingConfigurations) {
-            appLock.lock()
+            appLock.onBackground(SystemClock.elapsedRealtime())
             biometricPrompt.cancelAuthentication()
         }
         super.onStop()

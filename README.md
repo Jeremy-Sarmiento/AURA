@@ -4,7 +4,7 @@ AURA es un reproductor de música de alta fidelidad (Hi-Fi) y gestión de archiv
 
 ## Características Principales
 
-- **Bloqueo biométrico:** al abrir AURA o volver del segundo plano se solicita la biometría fuerte registrada en Android (huella o equivalente compatible). Cancelar o fallar no permite entrar. Sin sensor compatible o biometría registrada, la app permanece bloqueada y ofrece abrir los ajustes del teléfono. No se almacenan huellas ni se permite entrar con PIN.
+- **Bloqueo biométrico:** al abrir AURA se solicita la biometría fuerte registrada en Android (huella o equivalente compatible). Tras autenticarse, las salidas de menos de 2 minutos no vuelven a pedir la huella; al regresar después de 2 minutos o más, sí. El intervalo se mide con el reloj monotónico de Android, incluso con el teléfono suspendido. Si Android destruye el proceso, se requiere autenticar de nuevo. Cancelar o fallar no permite entrar. Sin sensor compatible o biometría registrada, la app permanece bloqueada y ofrece abrir los ajustes del teléfono. No se almacenan huellas ni se permite entrar con PIN.
 - **Audio de Alta Fidelidad (Hi-Fi):** Soporte para FLAC, WAV, ALAC y pistas sin pérdida de hasta 24-bit/192kHz.
 - **Gestión de Archivos Locales:** Selección de carpetas mediante SAF, escaneo recursivo de archivos nuevos y rutas persistentes entre actualizaciones.
 - **Letras Sincronizadas:** Visualización de letras con formato LRC.
