@@ -7,6 +7,39 @@ import org.junit.Test
 
 class AppLockTest {
     @Test
+    fun `device credential results cannot unlock without a pending system request`() {
+        val lock = AppLock()
+        lock.deviceCredentialResult(true)
+        assertFalse(lock.isUnlocked)
+        assertFalse(lock.beginDeviceCredential())
+        lock.beginAuthentication()
+        assertTrue(lock.beginDeviceCredential())
+        assertFalse(lock.beginDeviceCredential())
+        lock.authenticated()
+        assertFalse(lock.isUnlocked)
+        lock.deviceCredentialResult(true)
+        assertTrue(lock.isUnlocked)
+        assertFalse(lock.isConfirmingDeviceCredential)
+        assertTrue(lock.hasAttemptedAuthentication)
+    }
+
+    @Test
+    fun `cancelled credentials keep access and pending imports locked`() {
+        val lock = AppLock()
+        lock.beginAuthentication()
+        lock.beginDeviceCredential()
+        lock.deferActivityResult(12, -1, null)
+        lock.deviceCredentialResult(false)
+        assertFalse(lock.isUnlocked)
+        assertFalse(lock.isAuthenticating)
+        assertFalse(lock.isConfirmingDeviceCredential)
+        assertTrue(lock.hasAttemptedAuthentication)
+        assertTrue(lock.takeActivityResults().isEmpty())
+        lock.deviceCredentialResult(true)
+        assertFalse(lock.isUnlocked)
+    }
+
+    @Test
     fun `a brief background visit restores the authenticated session without a prompt`() {
         val lock = AppLock()
         lock.beginAuthentication()

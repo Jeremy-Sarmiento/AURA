@@ -12,6 +12,7 @@ package com.example
  */
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -26,6 +27,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
+import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -55,6 +57,8 @@ import com.example.aura.ui.AuraViewModel
 import com.example.ui.theme.AuraDarkBackground
 import com.example.ui.theme.MyApplicationTheme
 
+private const val DEVICE_CREDENTIAL_REQUEST = 1001
+
 class MainActivity : FragmentActivity() {
 
     private val appLock by lazy { ViewModelProvider(this)[AppLock::class.java] }
@@ -80,7 +84,14 @@ class MainActivity : FragmentActivity() {
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    appLock.authenticationError(errString.toString())
+                    if (appLock.isConfirmingDeviceCredential) return
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
+                        errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON && appLock.isAuthenticating
+                    ) {
+                        confirmDeviceCredential()
+                    } else {
+                        appLock.authenticationError(errString.toString())
+                    }
                 }
 
                 override fun onAuthenticationFailed() {
@@ -107,10 +118,10 @@ class MainActivity : FragmentActivity() {
                                 Text("AURA bloqueada", style = MaterialTheme.typography.headlineLarge)
                                 Text(appLock.message)
                                 Button(onClick = ::authenticate, enabled = !appLock.isAuthenticating) {
-                                    Text("Desbloquear con huella")
+                                    Text("Desbloquear AURA")
                                 }
-                                TextButton(onClick = ::openBiometricSettings) {
-                                    Text("Configurar huella en el teléfono")
+                                TextButton(onClick = ::openSecuritySettings, enabled = !appLock.isAuthenticating) {
+                                    Text("Abrir ajustes de seguridad")
                                 }
                             }
                         }
@@ -163,6 +174,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         // Evalúa la sesión antes de que se entreguen resultados de actividades externas.
+        if (!getSystemService(KeyguardManager::class.java).isDeviceSecure) appLock.lock()
         appLock.onForeground(SystemClock.elapsedRealtime())
         super.onStart()
     }
@@ -170,7 +182,7 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         processPendingActions()
-        authenticate()
+        if (!appLock.hasAttemptedAuthentication) authenticate()
     }
 
     private fun processPendingActions() {
@@ -183,6 +195,11 @@ class MainActivity : FragmentActivity() {
     // Los selectores externos no deben importar archivos antes de volver a autenticarse.
     @Deprecated("Callback de compatibilidad usado por ActivityResultRegistry")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == DEVICE_CREDENTIAL_REQUEST) {
+            appLock.deviceCredentialResult(resultCode == RESULT_OK)
+            processPendingActions()
+            return
+        }
         if (appLock.isUnlocked) {
             deliverActivityResult(requestCode, resultCode, data)
         } else {
@@ -195,7 +212,10 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onStop() {
-        if (!isChangingConfigurations) {
+        // El PIN nativo puede cubrir la actividad: no cancelar esa autenticación pendiente.
+        val systemAuthenticationInProgress = appLock.isAuthenticating &&
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R || appLock.isConfirmingDeviceCredential)
+        if (!isChangingConfigurations && !systemAuthenticationInProgress) {
             appLock.onBackground(SystemClock.elapsedRealtime())
             biometricPrompt.cancelAuthentication()
         }
@@ -204,38 +224,51 @@ class MainActivity : FragmentActivity() {
 
     private fun authenticate() {
         if (!appLock.beginAuthentication()) return
-        when (BiometricManager.from(this).canAuthenticate(BIOMETRIC_STRONG)) {
-            BiometricManager.BIOMETRIC_SUCCESS -> biometricPrompt.authenticate(
-                BiometricPrompt.PromptInfo.Builder()
-                    .setTitle("Desbloquear AURA")
-                    .setSubtitle("Usa la biometría registrada en tu teléfono")
-                    .setAllowedAuthenticators(BIOMETRIC_STRONG)
-                    .setNegativeButtonText("Cancelar")
-                    .build()
-            )
-            BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> appLock.authenticationError(
-                "Primero registra una huella en los ajustes de seguridad del teléfono."
-            )
-            BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> appLock.authenticationError(
-                "Este teléfono no tiene un sensor biométrico compatible. AURA permanece bloqueada."
-            )
-            else -> appLock.authenticationError(
-                "La biometría no está disponible. Desbloquea el teléfono e inténtalo de nuevo."
-            )
+        if (!getSystemService(KeyguardManager::class.java).isDeviceSecure) {
+            appLock.authenticationError("Configura un PIN, patrón o contraseña en los ajustes de seguridad del teléfono.")
+            return
+        }
+
+        val authenticators = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            BIOMETRIC_STRONG or DEVICE_CREDENTIAL
+        } else {
+            BIOMETRIC_STRONG
+        }
+        if (BiometricManager.from(this).canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS) {
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Desbloquear AURA")
+                .setSubtitle("Usa la huella o el bloqueo de seguridad del teléfono")
+                .setAllowedAuthenticators(authenticators)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                promptInfo.setNegativeButtonText("Usar PIN, patrón o contraseña")
+            }
+            biometricPrompt.authenticate(promptInfo.build())
+        } else {
+            confirmDeviceCredential()
         }
     }
 
-    private fun openBiometricSettings() {
-        val settingsIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Intent(Settings.ACTION_BIOMETRIC_ENROLL)
-                .putExtra(Settings.EXTRA_BIOMETRIC_AUTHENTICATORS_ALLOWED, BIOMETRIC_STRONG)
-        } else {
-            Intent(Settings.ACTION_SECURITY_SETTINGS)
+    private fun confirmDeviceCredential() {
+        if (!appLock.beginDeviceCredential()) return
+        // Android 7-10 no admite STRONG | DEVICE_CREDENTIAL en BiometricPrompt.
+        val credentialIntent = getSystemService(KeyguardManager::class.java)
+            .createConfirmDeviceCredentialIntent("Desbloquear AURA", "Confirma el bloqueo de seguridad del teléfono")
+        if (credentialIntent == null) {
+            appLock.authenticationError("Configura un PIN, patrón o contraseña en los ajustes de seguridad del teléfono.")
+            return
         }
         try {
-            startActivity(settingsIntent)
+            startActivityForResult(credentialIntent, DEVICE_CREDENTIAL_REQUEST)
         } catch (_: android.content.ActivityNotFoundException) {
-            appLock.authenticationError("Abre los ajustes del teléfono y registra una huella en Seguridad.")
+            appLock.authenticationError("No se pudo abrir la verificación de seguridad del teléfono.")
+        }
+    }
+
+    private fun openSecuritySettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
+        } catch (_: android.content.ActivityNotFoundException) {
+            appLock.authenticationError("Abre los ajustes del teléfono y configura un método de bloqueo en Seguridad.")
         }
     }
 

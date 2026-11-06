@@ -20,31 +20,52 @@ class AppLock : ViewModel() {
         private set
     var isAuthenticating by mutableStateOf(false)
         private set
-    var message by mutableStateOf("Usa la huella registrada en tu teléfono para abrir AURA.")
+    var isConfirmingDeviceCredential = false
+        private set
+    var hasAttemptedAuthentication = false
+        private set
+    var message by mutableStateOf("Usa la huella, el PIN, el patrón o la contraseña del teléfono para abrir AURA.")
         private set
 
     fun beginAuthentication(): Boolean {
         if (isUnlocked || isAuthenticating) return false
         isAuthenticating = true
+        hasAttemptedAuthentication = true
         message = "Confirma tu identidad en el diálogo de Android."
         return true
     }
 
     fun authenticated() {
-        if (!isAuthenticating) return
+        if (!isAuthenticating || isConfirmingDeviceCredential) return
         isAuthenticating = false
         isUnlocked = true
         hasUnlockedOnce = true
     }
 
     fun authenticationError(message: String) {
-        isAuthenticating = false
+        lock()
+        hasAttemptedAuthentication = true
         this.message = message
+    }
+
+    fun beginDeviceCredential(): Boolean {
+        if (!isAuthenticating || isConfirmingDeviceCredential) return false
+        isConfirmingDeviceCredential = true
+        return true
+    }
+
+    fun deviceCredentialResult(success: Boolean) {
+        if (!isConfirmingDeviceCredential) return
+        isConfirmingDeviceCredential = false
+        if (success) authenticated()
+        else authenticationError("No se confirmó tu identidad. AURA permanece bloqueada.")
     }
 
     fun lock() {
         isUnlocked = false
         isAuthenticating = false
+        isConfirmingDeviceCredential = false
+        hasAttemptedAuthentication = false
         authenticatedExitAt = null
     }
 
