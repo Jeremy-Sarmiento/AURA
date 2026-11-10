@@ -1,5 +1,14 @@
 package com.example
 
+/**
+ * ARCHIVO: MainActivityLockTest.kt
+ * FUNCIÓN: Pruebas Robolectric del bloqueo en MainActivity. Comprueban que un teléfono sin método
+ *          de seguridad permanece bloqueado, que las credenciales nativas solo desbloquean con
+ *          RESULT_OK, que los intents de audio esperan al desbloqueo y que FLAG_SECURE protege
+ *          la vista de recientes.
+ * NAVEGACIÓN: MainActivity -> AppLock; usa Robolectric para simular ciclo de vida e intents.
+ */
+
 import android.content.Intent
 import android.app.Activity
 import android.app.KeyguardManager
@@ -21,6 +30,8 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class MainActivityLockTest {
+
+    // Sin PIN/patrón/contraseña configurados no se puede autenticar ni abrir la app.
     @Test
     fun `a phone without a screen lock stays blocked and does not launch credentials`() {
         Robolectric.buildActivity(MainActivity::class.java).use { controller ->
@@ -35,6 +46,7 @@ class MainActivityLockTest {
         }
     }
 
+    // En Android 7-10 sin huellas se abre la confirmación nativa y cancelar no desbloquea.
     @Test
     @Config(sdk = [28])
     fun `a phone without fingerprints opens native credentials and cancellation cannot unlock`() {
@@ -57,6 +69,7 @@ class MainActivityLockTest {
         }
     }
 
+    // Solo el RESULT_OK del flujo de credenciales concede acceso al volver a la actividad.
     @Test
     @Config(sdk = [29])
     fun `only successful native credential confirmation unlocks after returning to the app`() {
@@ -77,6 +90,7 @@ class MainActivityLockTest {
         }
     }
 
+    // Un intent ACTION_VIEW no importa audio hasta desbloquear y FLAG_SECURE oculta la vista previa.
     @Test
     fun `external audio intents remain pending while locked and previews are protected`() {
         val uri = Uri.parse("content://test/music.mp3")

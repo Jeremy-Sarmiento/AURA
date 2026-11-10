@@ -185,6 +185,10 @@ class MainActivity : FragmentActivity() {
         if (!appLock.hasAttemptedAuthentication) authenticate()
     }
 
+    /**
+     * processPendingActions: entrega los resultados SAF retenidos y procesa el intent de audio
+     * pendiente. Solo actúa cuando AppLock confirma que la app está desbloqueada.
+     */
     private fun processPendingActions() {
         appLock.takeActivityResults().forEach { pending ->
             deliverActivityResult(pending.requestCode, pending.resultCode, pending.data)
@@ -207,6 +211,7 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    // Reenvía el resultado ya autorizado al ActivityResultRegistry de Compose.
     private fun deliverActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
     }
@@ -222,6 +227,11 @@ class MainActivity : FragmentActivity() {
         super.onStop()
     }
 
+    /**
+     * authenticate: elige el flujo de autenticación disponible. En Android 11+ combina biometría
+     * fuerte y credenciales del dispositivo; en versiones anteriores usa biometría con un botón
+     * negativo que abre la confirmación nativa de PIN/patrón/contraseña.
+     */
     private fun authenticate() {
         if (!appLock.beginAuthentication()) return
         if (!getSystemService(KeyguardManager::class.java).isDeviceSecure) {
@@ -248,6 +258,10 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * confirmDeviceCredential: abre la pantalla nativa de PIN/patrón/contraseña para dispositivos
+     * sin biometría o Android 7-10, que no acepta STRONG | DEVICE_CREDENTIAL en BiometricPrompt.
+     */
     private fun confirmDeviceCredential() {
         if (!appLock.beginDeviceCredential()) return
         // Android 7-10 no admite STRONG | DEVICE_CREDENTIAL en BiometricPrompt.
@@ -264,6 +278,7 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    // Abre los ajustes de seguridad del teléfono cuando no existe ningún método de bloqueo.
     private fun openSecuritySettings() {
         try {
             startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
