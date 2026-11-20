@@ -72,7 +72,17 @@ android {
     compose = true
     buildConfig = true
   }
-  testOptions { unitTests { isIncludeAndroidResources = true } }
+  testOptions {
+    unitTests {
+      isIncludeAndroidResources = true
+      all {
+        // Los sandboxes de distintas API de Robolectric no comparten clases Android.
+        it.maxHeapSize = "1g"
+        it.forkEvery = 1
+        it.maxParallelForks = 1
+      }
+    }
+  }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
@@ -88,6 +98,8 @@ dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.biometric)
+  // Biometric 1.1 trae Fragment 1.1, incompatible con los requestCode de ActivityResultRegistry.
+  implementation(libs.androidx.fragment)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
